@@ -1,0 +1,4 @@
+liquid chromatography at the critical condition, LCCC, liquid chromatography at critical conditions
+reversed-phase chromatography, RPC, reversed phase chromatography, reverse-phase chromatography
+normal-phase chromatography, NPC, normal phase chromatography
+hydrophilic interaction chromatography, hydrophilic-interaction chromatography, HILIC

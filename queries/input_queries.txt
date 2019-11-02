@@ -1,0 +1,2 @@
+NMR, (Metabolomics OR metabonomics) AND (METHODS:"Nuclear Magnetic Resonance" OR METHODS:NMR OR METHODS:"NMR spectrometry" OR METHODS:"nuclear magnetic resonance spectrometry" OR METHODS:"NMR spectroscopy" OR METHODS:"nuclear magnetic resonance (NMR) spectroscopy")
+LCMS, (Metabolomics OR metabonomics) AND (METHODS:"LC/MS" OR METHODS:"LC-MS" OR METHODS:"LC MS" OR METHODS:"liquid chromatography mass spectrometry" OR METHODS:"liquid chromatography/mass spectrometry" OR METHODS:"LCMS")
