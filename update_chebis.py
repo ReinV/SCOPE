@@ -33,7 +33,6 @@ def return_archived_ontology(version):
     '''
     url = 'ftp://ftp.ebi.ac.uk/pub/databases/chebi/archive/rel' + version + '/ontology/chebi.obo'
     graph = obonet.read_obo(url)
-    # id_to_name = {id_: data.get('name') for id_, data in graph.nodes(data=True)}
     return graph
 
 def show_updates(graph_new, graph_old):
@@ -53,7 +52,7 @@ def get_mass(node, graph):
     try:
         for value in graph.node[node]['property_value']:
             if 'mass' in value and 'monoisotopicmass' not in value:
-                mass = value.split('\"')[1] # wat te doen met een 0 ?
+                mass = value.split('\"')[1]
     except:
         pass
     return mass
@@ -71,36 +70,60 @@ def get_smiles(node, graph):
         pass
     return smile
 
-def get_relations(nodes, graph):
+def get_relations(nodes, graph, has_role):
+    '''
+    This function recieves a list of ids for which parents with 'is a' and 'has role' relationships types need to be returned.
+    It returns all ChEBI IDs of those parents in a dictionary with the child ChEBI ID as key.
+    '''
     parent_to_key = dict()
 
-    for node in nodes:
-        for child, parent, key in graph.out_edges(node, keys=True):
-            if key == 'is_a':
-                try:
-                    parent_to_key[parent]
-                except:
-                    parent_to_key[parent] = key
+    if has_role:
+        for node in nodes:
+            for child, parent, key in graph.out_edges(node, keys=True):
+                if key == 'is_a' or key == 'has_role':
+                    try:
+                        parent_to_key[parent]
+                    except:
+                        parent_to_key[parent] = key
+    else:
+        for node in nodes:
+            for child, parent, key in graph.out_edges(node, keys=True):
+                if key == 'is_a':
+                    try:
+                        parent_to_key[parent]
+                    except:
+                        parent_to_key[parent] = key
 
     return parent_to_key
 
-def get_superterms(id, graph, id_to_name):
+def get_superterms(id, graph, has_role):
     '''
-    This function return the is_a terms for a given ChEBI ID.
+    This function recieves an id of which all superterms of a certain relationships type needs to be returned.
+    The function searches for 'is a' relationships (and 'has role' if has_role = True) until all possible relationships with other ChEBI IDs are found.
+    It returns a list of these ChEBI IDs.
     '''
     list_relations = []
     nodes = [id]
     end = False
 
     while end == False:
-        parent_to_key = get_relations(nodes, graph) # get the 'is a' relationships
-        if len(parent_to_key) == 0: #if there are no 'is a' relationships, end the search
+        # get the 'is a' and 'has role' (if has_role == True) relationships for the list of ids
+        parent_to_key = get_relations(nodes, graph, has_role)
+
+        #if there are no 'is a' (or 'has role') relationships, end the search
+        if len(parent_to_key) == 0:
             end = True
         else:
+            # clear the list for a new search for relationships
             nodes = []
+
             for parent in parent_to_key.keys():
+                # add the parents to the list for a new search for relationships
                 nodes.append(parent)
-                list_relations.append(id_to_name[parent])
+
+                # add parents to list of relationships
+                new_id = parent.split(":")[1]
+                list_relations.append(new_id)
 
     return list_relations
 
@@ -126,14 +149,14 @@ def read_file(file):
         for line in lines:
             line_to_list = line.split('\t')
             id = line_to_list[0]
-            info = line_to_list[1].strip() # nodig?
+            info = line_to_list[1].strip()
             id_to_info[id] = info
     else:
         f = open(file, 'w') # make file
 
     return id_to_info
 
-def update_smile(file, graph, id_to_name):
+def update_smile(file, graph):
     '''
     This function writes old and new id's with their smile to a .tsv file, and the new smiles will be written to a seperate text file.
     The new id's will be written to the file after the old id's, so that the order is similar to the new smiles text file.
@@ -179,15 +202,16 @@ def update_file(file, graph, id_to_name):
             id = key.split(":")[1]
             if file == 'files/ChEBI2Names.tsv':
                 info = id_to_name[key]
-                # info = get_name(key, graph)
             elif file == 'files/ChEBI2Superterms.tsv':
-                info = get_superterms(key, graph, id_to_name)
+                info = get_superterms(key, graph, has_role=False)
+            elif file == 'files/ChEBI2Superterms_roles.tsv':
+                info = get_superterms(key, graph, has_role=True)
             elif file == 'files/ChEBI2Mass.tsv':
                 info = get_mass(key, graph)
             writer.writerow([id, info])
 
 def main():
-    files = ['files/ChEBI2Names.tsv','files/ChEBI2Smiles.tsv', 'files/ChEBI2Superterms.tsv', 'files/ChEBI2Mass.tsv']
+    files = ['files/ChEBI2Names.tsv','files/ChEBI2Smiles.tsv', 'files/ChEBI2Superterms.tsv', 'files/ChEBI2Superterms_roles.tsv', 'files/ChEBI2Mass.tsv']
     current_version = return_current_version()
     latest_version, graph, id_to_name = return_latest_ontology() # graph = ontology
 
@@ -196,13 +220,13 @@ def main():
     else:
         print('files need updating')
         graph_old = return_archived_ontology(current_version)
-        # updates = show_updates(graph, graph_old)
-        # print(updates)
+        updates = show_updates(graph, graph_old)
+        print(updates)
 
         for file in files:
-            # if file == 'files/ChEBI2Smiles.tsv':
-            #     update_smile(file, graph, id_to_name)
-            if file == 'files/ChEBI2Superterms.tsv':
+            if file == 'files/ChEBI2Smiles.tsv':
+                update_smile(file, graph)
+            else:
                 update_file(file, graph, id_to_name)
             print('%s updated' % file)
 
