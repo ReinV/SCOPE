@@ -6,6 +6,7 @@ import json
 import time
 import csv
 import argparse
+import datetime
 
 
 def construct_url(query, pageSize, cursorMark):
@@ -23,9 +24,19 @@ def construct_url(query, pageSize, cursorMark):
 def get_data(url):
     """
     This function recieves a url and returns the json data as a dictionary or list.
+    If the connection fails within 5 seconds, it waits 10 minutes to try again, repeated till succes.
     """
-    response = urllib.request.urlopen(url)
-    data = json.loads(response.read())
+    connection = False
+    while connection == False:
+        try:
+            response = urllib.request.urlopen(url, timeout=5)
+            data = json.loads(response.read())
+            connection = True
+        except:
+            # if host kills connection, wait 10 minutes and try again (because connection remains False)
+            current_time = datetime.datetime.now()
+            print('at time %s connection failed, waiting 10 minutes to retry connection...' % current_time.strftime("%H:%M:%S"))
+            time.sleep(600)
     return data
 
 
@@ -68,16 +79,19 @@ def get_annotations(publications):
     This function searches through the publications with text mined terms for annotations of type 'Chemicals'.
     From the ChEBI urls, the ChEBI ID's are extracted and returned as values with the publication ID's as keys in a dictionary.
     """
+
     chebi_dict = dict()
     count = 0
     for pub_id in publications.keys():
-        if count%1000 == 0:
+        count += 1
+        if count%100 == 0:
+            print("getting annotations: %d publications of %d total" % (count, len(publications.keys())))
             time.sleep(5) # be easy on server
 
         source = publications[pub_id]
         url = "https://www.ebi.ac.uk/europepmc/annotations_api/annotationsByArticleIds?articleIds=" + str(source) + ":" + str(pub_id) + "&format=JSON"
-        annotations_json = get_data(url)
 
+        annotations_json = get_data(url)
         for element in annotations_json[0]['annotations']:
             if element['type'] == 'Chemicals':
                 chebi_url = element['tags'][0]['uri']
@@ -87,28 +101,47 @@ def get_annotations(publications):
                     chebi_dict[pub_id].append(chebi_id)
                 except:
                     chebi_dict[pub_id] = [chebi_id]
+
     return chebi_dict
 
-def write_results(dict, terms):
+def write_results(dict, term, query):
     """
     This function writes the ChEBI urls and publication ID's in a seperate csv file.
+    Additionally, metadata is written to a text file in the metadata folder
     """
-
     file = 'results/'+str(term)+'_ChEBI_IDs.tsv'
-    with open(file, 'a', newline='', encoding="utf-8") as tsvfile:
+    count = 0
+    uniques = set()
+
+    with open(file, 'w', newline='', encoding="utf-8") as tsvfile:
         writer = csv.writer(tsvfile, delimiter = '\t')
         for pub_id in dict.keys():
             for chebi_id in dict[pub_id]:
+                count += 1
+                uniques.add(chebi_id)
                 writer.writerow([chebi_id, pub_id])
 
-    print('%s query results are written to file' % shortest_term)
+    print('%s query results are written to file' % term)
+
+    current_day = datetime.date.today()
+    number_of_papers = len(dict.keys())
+    number_of_chemicals = count
+    number_of_unique_chemicals = len(uniques)
+
+    file = 'metadata/'+str(term)+'.txt'
+    f = open(file, 'w')
+    f.write('metadata for %s\n' % term
+    + 'query: %s\n' % query
+    + 'search date: %s\n' % current_day
+    + 'number of papers: %d\n' % number_of_papers
+    + 'number of chemicals: %d\n' % number_of_chemicals
+    + 'number of unique chemicals: %d (note: not all chemicals can be plotted due to missing logP values)' % number_of_unique_chemicals )
 
 def read_input(file):
     '''
     This function reads the input file and returns the query terms in a dictionary.
+    The therm used for saving the file is the string before ", " and the query is the string after the ", "
     Every line in the input file should be a new query.
-    In the lines, synonyms are sperated by ", ".
-    The dictionary values are lists of the terms, including the first tirm that is used as a key.
     '''
     f = open(file, 'r')
     input = f.readlines()
@@ -141,7 +174,7 @@ def main():
         publications = search_publications(query, pageSize)
         chebi_dict = get_annotations(publications)
         print('%d publications found with search term %s' % (len(chebi_dict.keys()), term) )
-        write_results(chebi_dict, term)
+        write_results(chebi_dict, term, query)
 
 if __name__ == '__main__':
     main()
