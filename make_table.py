@@ -8,6 +8,10 @@ import math
 from os import listdir
 
 def read_searches(file, id_to_pubs, all_unique_pubs):
+    '''
+    This function recieves a searches_by_year file, and a dictionary and set to append new information to.
+    For every searches_by_year file, all the publication ids and ChEBI IDs are extracted and added to the dictionaries.
+    '''
     path = 'searches_by_year/'+str(file)
     print(path)
     f = open(path, 'r')
@@ -119,7 +123,12 @@ def read_file(file, key, data):
 
     return data
 
-def normalization(id_to_counts, id_to_pubs, all_unique_pubs):
+def normalisation(id_to_counts, id_to_pubs, all_unique_pubs):
+    '''
+    This function recieves results from the query search (id_to_counts), and results from the searches_by_year (id_to_pub and a set unique chemicals).
+    These are used to normalise the counts with TFIDF (see https://en.wikipedia.org/wiki/Tf%E2%80%93idf).
+    The function returns a dictionary with the chebi ids as keys and normalised counts (tfidf) as values.
+    '''
     N = len(all_unique_pubs)
     id_to_tfidf = dict()
     for id in id_to_counts.keys():
@@ -149,7 +158,7 @@ def main():
     id_to_counts, id_to_publications, term = read_input(results)
 
     # get unique publications for all chebi id's since 2005 (?)
-    print('reading files for normalization...')
+    print('reading files for normalisation...')
     searches_by_year = listdir('searches_by_year')
     id_to_pubs = dict()
     all_unique_pubs = set()
@@ -157,9 +166,9 @@ def main():
         if '.csv' in file:
             id_to_pubs, all_unique_pubs = read_searches(file, id_to_pubs, all_unique_pubs)
 
-    # normalization
-    print('perform normalization...')
-    id_to_tfidf = normalization(id_to_counts, id_to_pubs, all_unique_pubs)
+    # normalisation
+    print('perform normalisation (tfidf)...')
+    id_to_tfidf = normalisation(id_to_counts, id_to_pubs, all_unique_pubs)
 
     # get properties for the chebi ids from the chebi files
     print('reading files with properties...')
