@@ -19,12 +19,16 @@ The 'predictions_to_file.py' script connects the predictions to the correct ChEB
 
 - In the 'queries' folder, text files with the query terms should be stored. Synonyms of a query should be added on the same line, each separated by a comma. Multiple queries can be added on new lines.
 
+- In the 'metadata' folder, metadata from a query search is stored in a text file. This contains information such as the query, search date, amount of publications etc.
+
 - In the 'results' folder, annotated chemicals that have been extracted from the literature search are stored with their ChEBI identifier plus the publication id of the paper in which it was found.
 
 - The 'tables' folder contains files for every query search, in which tables are created with the ChEBI identifier, the amount of hits in the search, names, and other properties.
 
 - The 'plots' folder contains the html files of the interactive plots. Mass is shown on the y-axis and logP is shown on the x-axis.
  The color intensity is log scaled.
+ 
+ - In the 'searches_by_year' folder, data of all publications per year can be found. This data is used to perform tfidf normalization. Not on this repository, might be added later (2019/12/11)
  
 ## Scripts
 In the toolbox are python scripts for the "query search to visualization" workflow, but also scripts that make/update files that are used for visualization (see run only once scripts).
@@ -33,12 +37,11 @@ In the toolbox are python scripts for the "query search to visualization" workfl
 This script takes query searches in a text file from the 'queries' folder as input, extracts all the chemical annotations in the papers found with this query on the Europe PMC site, and pust the results in a .tsv file in the 'results' folder.
 
 ### make_table.py
-This scripts takes the results from the 'results' folder as input, as well as the ChEBI files in the 'files' folder, and makes a table for every chemical containing its ID, count, mass, etc. This table is stored as a .tsv file in the 'tables' folder.
+This scripts takes the results from the 'results' folder as input, as well as the ChEBI files in the 'files' folder, and makes a table for every chemical containing its ID, count, mass, etc. This table is stored as a .tsv file in the 'tables' folder. Additionally, counts from the chemicals are normalized with [term frequency inversed document frequency](https://en.wikipedia.org/wiki/Tf%E2%80%93idf), using the data in the 'searches_by_year' folder.
 
-### visualize.py
+### visualize_query.py
   This script takes a table from the 'tables' folder as an input. These counts are then shown in interactive hexabin plots with mass on y-axis and logP on x-axis using the Bokeh Library.
 
-Will be added later: Counts from the chemicals are normalized with [term frequency inversed document frequency](https://en.wikipedia.org/wiki/Tf%E2%80%93idf).
 
 ## Run only once (per month) scripts
 
