@@ -1,13 +1,13 @@
 #!/usr/bin/python
 
+import argparse
 import urllib.request
 import urllib.parse
 import json
-import time
+import concurrent.futures
 import csv
-import argparse
+import time
 import datetime
-
 
 def construct_url(query, pageSize, cursorMark):
     """
@@ -21,94 +21,127 @@ def construct_url(query, pageSize, cursorMark):
     return url
 
 
-def get_data(url):
+def get_data(url, timeout, sleep_time):
     """
-    This function recieves a url and returns the json data as a dictionary or list.
-    If the connection fails within 5 seconds, it waits 10 minutes to try again, repeated till succes.
+    This function recieves a url and returns the json data as type dictionary.
+    If there is no response within the given timeout, an error message is printed and the connection is retried after the given sleep time.
     """
     connection = False
     while connection == False:
         try:
-            response = urllib.request.urlopen(url, timeout=5)
+            response = urllib.request.urlopen(url, timeout=timeout)
             data = json.loads(response.read())
             connection = True
         except:
-            # if host kills connection, wait 10 minutes and try again (because connection remains False)
-            current_time = datetime.datetime.now()
-            print('at time %s connection failed, waiting 10 minutes to retry connection...' % current_time.strftime("%H:%M:%S"))
-            time.sleep(600)
+            print('connection failed')
+            time.sleep(sleep_time) # in seconds
     return data
 
 
-def find_publications_with_tmt(data, dict):
+def find_publications_with_tmt(data):
     """
     This function looks for publications with text mined terms.
-    It returns a dictionary with the ID's of those publications as keys and the source as value.
+    It returns a list of tuples with the publication ID as the first value and the publication source as the second value.
     """
+
+    page = []
     for publication in data['resultList']['result']:
         if publication['hasTextMinedTerms'] == 'Y':
-            dict[publication['id']] = publication['source']
+            publication = (publication['id'], publication['source'])
+            page.append(publication)
 
-    return(dict)
+    return page
 
 
 def search_publications(query, pageSize):
     """
-    This function searches publications with the query and returns a dictionary with publication ID's that contained text mined terms.
-    CursorMark is used to go through the search result pages.
-    For every page, new ID's plus sources are added to the publications dictionary.
+    This function searches the europe pmc site with the query and retrieves all hits (publications).
+    Variable 'CursorMark' is used to go through the search result pages until all publcations are retrieved.
+    Publications are selected for having text mined terms with function 'find_publications_with_tmt'.
+    Their annotations are downloaded with function 'get_annotations' and saved in a dictionary with publication id as key and chemical ids in a list as value.
+    After the search is done, this dictionary is returned.
     """
+    chebi_dict = dict()
+    TIMEOUT=60
+    SLEEP_TIME=5
+
+    print("searching publications...")
     cursorMark = "*"
-    query_data = get_data(construct_url(query, pageSize, cursorMark))
+    pages = []
+    url = construct_url(query, pageSize, cursorMark)
+    query_data = get_data(url, TIMEOUT, SLEEP_TIME)
+    total_hits = query_data['hitCount']
     nextcursormark = query_data['nextCursorMark']
-    publications = dict()
-    publications = find_publications_with_tmt(query_data, publications)
+    publications = find_publications_with_tmt(query_data)
+    chebi_dict = get_annotations(publications, chebi_dict)
 
+    counter = 1
     while cursorMark != nextcursormark:
+
+        print('%d/%d publications retrieved' % (counter*1000, total_hits))
+
         cursorMark = nextcursormark
-        query_data = get_data(construct_url(query, pageSize, cursorMark))
+        url = construct_url(query, pageSize, cursorMark)
+        query_data = get_data(url, TIMEOUT, SLEEP_TIME)
         nextcursormark = query_data['nextCursorMark']
-        publications = find_publications_with_tmt(query_data, publications)
-        time.sleep(5) # be easy on server
+        publications = find_publications_with_tmt(query_data)
+        chebi_dict = get_annotations(publications, chebi_dict)
 
-    return publications
+        counter += 1
+
+    return chebi_dict
 
 
-def get_annotations(publications):
+def get_annotations(publications, dict):
     """
     This function searches through the publications with text mined terms for annotations of type 'Chemicals'.
     From the ChEBI urls, the ChEBI ID's are extracted and returned as values with the publication ID's as keys in a dictionary.
     """
 
-    chebi_dict = dict()
-    count = 0
-    for pub_id in publications.keys():
-        count += 1
-        if count%100 == 0:
-            print("getting annotations: %d publications of %d total" % (count, len(publications.keys())))
-            time.sleep(5) # be easy on server
+    # Construct urls to the annotation data for every publications
+    urls = []
+    for publication in publications:
+        id = publication[0]
+        source = publication[1]
+        url = "https://www.ebi.ac.uk/europepmc/annotations_api/annotationsByArticleIds?articleIds=" + str(source) + ":" + str(id) + "&format=JSON"
+        urls.append(url)
 
-        source = publications[pub_id]
-        url = "https://www.ebi.ac.uk/europepmc/annotations_api/annotationsByArticleIds?articleIds=" + str(source) + ":" + str(pub_id) + "&format=JSON"
+    json_data = []
+    CONNECTIONS = 10
+    TIMEOUT = 10
+    SLEEP_TIME = 300
 
-        annotations_json = get_data(url)
-        for element in annotations_json[0]['annotations']:
-            if element['type'] == 'Chemicals':
-                chebi_url = element['tags'][0]['uri']
-                chebi_id = chebi_url.split('_')[1]
-                try: #check if publication ID is already in dictionary, if not, then a list as value needs to be created for potentially multiple chebi id's.
-                    chebi_dict[pub_id]
-                    chebi_dict[pub_id].append(chebi_id)
-                except:
-                    chebi_dict[pub_id] = [chebi_id]
+    # ThreadPoolExecutor allows multiple connections, thereby speeding up the process of downloading annotations
+    with concurrent.futures.ThreadPoolExecutor(max_workers=CONNECTIONS) as executor:
+        future_to_url = (executor.submit(get_data, url, TIMEOUT, SLEEP_TIME) for url in urls)
+        for future in concurrent.futures.as_completed(future_to_url):
+            data = future.result()
+            json_data.append(data)
 
-    return chebi_dict
+    # Select the downloaded annotations for type 'Chemicals' and extract ChEBI ID
+    for data in json_data:
+        if len(data) > 0:
+            annotations = data[0]['annotations']
+            pub_id = data[0]['extId']
+            for annotation in annotations:
+                if annotation['type'] == 'Chemicals':
+                    chebi_url = annotation['tags'][0]['uri']
+                    chebi_id = chebi_url.split('_')[1]
+
+                    # Check if publication ID is already in dictionary, if not, then a list as value needs to be created for potentially multiple chebi id's per publication
+                    try:
+                        dict[pub_id]
+                        dict[pub_id].append(chebi_id)
+                    except:
+                        dict[pub_id] = [chebi_id]
+
+    return dict
 
 def write_results(dict, term, query):
     """
-    This function writes the ChEBI urls and publication ID's in a seperate csv file.
-    Additionally, metadata is written to a text file in the metadata folder
+    This function writes the ChEBI urls and publication ID's in a seperate csv file and the metadata to a text file.
     """
+
     file = 'results/'+str(term)+'_ChEBI_IDs.tsv'
     count = 0
     uniques = set()
@@ -123,6 +156,7 @@ def write_results(dict, term, query):
 
     print('%s query results are written to file' % term)
 
+    # Get metadata
     current_day = datetime.date.today()
     number_of_papers = len(dict.keys())
     number_of_chemicals = count
@@ -140,15 +174,16 @@ def write_results(dict, term, query):
 def read_input(file):
     '''
     This function reads the input file and returns the query terms in a dictionary.
-    The therm used for saving the file is the string before ", " and the query is the string after the ", "
     Every line in the input file should be a new query.
+    In the lines, synonyms are sperated by ", ".
+    The dictionary values are lists of the terms, including the first tirm that is used as a key.
     '''
     f = open(file, 'r')
     input = f.readlines()
     queries = dict()
 
     for line in input:
-        query_list = line.split(',')
+        query_list = line.split(',', 1)
         term = query_list[0]
         query = query_list[1].strip()
         queries[term] = query
@@ -171,10 +206,10 @@ def main():
     queries = read_input(input_file)
     for term in queries.keys():
         query = queries[term]
-        publications = search_publications(query, pageSize)
-        chebi_dict = get_annotations(publications)
-        print('%d publications found with search term %s' % (len(chebi_dict.keys()), term) )
+        print('searching with: %s' % query)
+        chebi_dict = search_publications(query, pageSize)
         write_results(chebi_dict, term, query)
+        print('%d publications with text mined terms and annotations of type \'chemical\' found for %s' % (len(chebi_dict.keys()), term) )
 
 if __name__ == '__main__':
     main()
