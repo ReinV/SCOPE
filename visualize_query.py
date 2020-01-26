@@ -6,9 +6,11 @@ import argparse
 from math import exp
 from math import sqrt
 from datetime import datetime
+from os import listdir
+import sys
 
 from bokeh import events
-from bokeh.io import output_file, show
+from bokeh.io import output_file, show, save
 from bokeh.models import HoverTool
 from bokeh.models import CustomJS
 from bokeh.models import HoverTool
@@ -35,14 +37,18 @@ def import_table(file):
         count = int(line_to_list[1])
         tfidf = int(line_to_list[2])
         name = line_to_list[3]
-        mass = float(line_to_list[4])
+        mass_string = line_to_list[4]
+        if mass_string == 'NaN':
+            mass = 777
+        else:
+            mass = float(mass_string)
         logP = float(line_to_list[5])
 
         table[id] = {"Count": count, "TFIDF": tfidf, "Name": name, "Mass": mass, "logP": logP}
 
     return table
 
-def create_array(table, normalisation):
+def create_array(table, normalization):
     '''
     This function recieves the table dictionary and returns numpy arrays with the mass, logP and names of the chemicals.
     These values and names are repeated corresponding to the count value.
@@ -51,7 +57,7 @@ def create_array(table, normalisation):
     y = []
     ids = []
     for id in table.keys():
-        if normalisation:
+        if normalization:
             count = table[id]["TFIDF"]
         else:
             count = table[id]["Count"]
@@ -81,9 +87,9 @@ def hexbin(x, y, ids, size, aspect_scale, orientation):
 
     return df
 
-def find_most_common(list_names):
+def find_most_common(list_names, tooltip_count):
     '''
-    This function recieves a list of (repeated) chemical ids. It returns a list of the 5 most common chemical ids and their counts.
+    This function recieves a list of (repeated) chemical ids. It returns a list of the tooltip_count=X most common chemical ids and their counts.
     In some hexagons there are less than 5 chemicals, if so empty names/counts are returned.
     '''
     uniques = list(set(list_names))
@@ -99,13 +105,12 @@ def find_most_common(list_names):
     k = Counter(name_to_count)
 
     # find 5 highest values
-    high = k.most_common(5)
+    high = k.most_common(tooltip_count)
 
-    # EXPLAIN TUPPLE?
-    # make a list of 5 names, if there are no more names in high, append empty strings as names ...
+    # make a list of X names, if there are no more names in high, append empty strings as names ...
     # so that something can be added to the columns when this list is returned
     most_common_names = []
-    for i in range(5):
+    for i in range(tooltip_count):
         if (i+1) <= len(high):
             name_and_count = high[i]
         else:
@@ -119,22 +124,26 @@ def add_counts(df, table):
     This function recieves a pandas dataframe with q, r coordinates and names as columns.
     For every row (hexagon), the total amount of chemicals is counted and the 5 most common chemicals are put in seperate columns.
     '''
+    # Amount of ids shown in the tooltip (e.g. with TOOLTIP_COUNT=3 the 3 most common chebi ids will be shown)
+    # Currently, max value is 3 (see html code for hover tooltip)
+    TOOLTIP_COUNT = 3
+
     total_counts = []
 
     # make columns
-    ids = [[] for _ in range(5)]
-    counts = [[] for _ in range(5)]
-    names = [[] for _ in range(5)]
+    ids = [[] for _ in range(TOOLTIP_COUNT)]
+    counts = [[] for _ in range(TOOLTIP_COUNT)]
+    names = [[] for _ in range(TOOLTIP_COUNT)]
 
     for row in df['ids']:
         # total amount of hits
         total_counts.append(len(row))
 
         # count 5 most common unique hits (names), returns list
-        most_common_chemicals = find_most_common(row)
+        most_common_chemicals = find_most_common(row, TOOLTIP_COUNT)
 
         # add names to their corresponding columns (most common name in first list, 2nd most common name in second list etc.)
-        for i in range(5):
+        for i in range(TOOLTIP_COUNT):
             id = most_common_chemicals[i][0]
             count = most_common_chemicals[i][1]
             try:
@@ -147,7 +156,7 @@ def add_counts(df, table):
             names[i].append(name)
 
     #add lists to df as columns
-    for i in range(5):
+    for i in range(TOOLTIP_COUNT):
         column_name = "id"+str(i+1)
         df[column_name] = ids[i]
         column_name = "count"+str(i+1)
@@ -161,14 +170,15 @@ def add_counts(df, table):
 
     return df
 
-def construct_source_list(df):
+def construct_source_list(df, blur_max, step_size):
     '''
     This function recieves a dataframe and adds gaussian blur to copies of this dataframe for a range of blur values.
     It returns a list with these dataframes ordered from no blur to high blur.
     '''
-    source_list = [ColumnDataSource(data=df)]
-    for i in range(1, 17):
-        sd_x = i / 4
+    source_list = [ColumnDataSource(df)]
+    end = int(blur_max/step_size)+1
+    for i in range(1, end):
+        sd_x = i*step_size
         sd_y = sd_x / 2
         df_new = add_gaussian_blur(df, sd_x, sd_y)
         source = ColumnDataSource(data=df_new)
@@ -202,6 +212,11 @@ def add_gaussian_blur(df, sd_x, sd_y):
     (4,-3):(6, sqrt(3)),(4,-2):(6, 0),(4,-1):(6, sqrt(3)),
     (5,-3):(7.5, sqrt(3)/2),(5,-2):(7.5, sqrt(3)/2)}
 
+
+    # make normal python dict
+    coords_to_count = dict()
+    coords_to_blur = dict()
+
     # calculate blur for all the keys in the kernel, replace distance with blur factor
     for key in kernel:
         distance = kernel[key]
@@ -210,10 +225,7 @@ def add_gaussian_blur(df, sd_x, sd_y):
         blur = get_blur(x, y, sd_x, sd_y)
         kernel[key] = blur
 
-    # make normal python dict
-    coords_to_count = dict()
-    coords_to_blur = dict()
-
+    # go through all coordinates
     for index, row in df.iterrows():
         q = row['q']
         r = row['r']
@@ -227,31 +239,29 @@ def add_gaussian_blur(df, sd_x, sd_y):
             column_value = row[i]
             coords_to_blur[(q,r)][column_name] = column_value
 
-    # go through all coordinates
+    # Add blur
     for coord in coords_to_count.keys():
         q = coord[0]
         r = coord[1]
         counts = coords_to_count[coord]
-        # for every coordinate, apply kernel (to surrounding hexagons)
+        # For every coordinate, apply kernel (to surrounding hexagons)
         for key in kernel.keys():
             q_new = q + key[0]
             r_new = r + key[1]
             factor = kernel[key]
-            # check if surrounding hexagon exists and apply blur
+            # Check if surrounding hexagon exists and apply blur
             try:
                 coords_to_blur[(q_new, r_new)]['blur'] += counts*factor
                 coords_to_blur[(q_new, r_new)]['scaling'] += counts*factor
             except:
-                # if hexagon does not exist, make a new hexagon (all columns (keys) need to be added, but most values will be empty)
+                # If hexagon does not exist, make a new hexagon
+                # All columns (keys) need to be added here or else Bokeh will crash, but most values will be left empty
                 blur_new = counts*factor
                 coords_to_blur[(q_new, r_new)] = {'q': q_new, 'r': r_new, 'x': '-', 'y': '-','counts': 0, 'blur': blur_new, 'scaling': blur_new, 'ids': [],
                 'id1': '', 'count1': '', 'name1': '',
                 'id2': '', 'count2': '', 'name2': '',
-                'id3': '', 'count3': '', 'name3': '',
-                'id4': '', 'count4': '', 'name4': '',
-                'id5': '', 'count5': '', 'name5': ''}
+                'id3': '', 'count3': '', 'name3': ''}
 
-    # new dataframe with gaussian blur
     df_gaussian = pd.DataFrame()
 
     # add all dictionary keys as columns (lists) to the dataframe
@@ -313,16 +323,6 @@ def return_tooltip():
         <th>@count3</th>
         <th>@name3</th>
       </tr>
-      <tr>
-        <th>@id4</th>
-        <th>@count4</th>
-        <th>@name4</th>
-      </tr>
-      <tr>
-        <th>@id5</th>
-        <th>@count5</th>
-        <th>@name5</th>
-      </tr>
     </table>
 
     """
@@ -352,21 +352,23 @@ def return_code(widget):
             // apply changes
             source.change.emit();
             """
+
     elif widget == 'slider2':
         code = """
             var value = cb_obj.value;
-            var value = value*4;
+            var step_size = step_size
+            var value = Math.round(value/step_size)
             var mapper = mapper;
-            var power = slider1.value;
+            var power = slider1.value
+            var source_data = source.data;
             var source_list = source_list;
             var source_norm_list = source_norm_list;
-            var source_data = source.data;
-            var checkbox = checkbox
+            var checkbox = checkbox;
 
-            if (checkbox.value == 0){
-            var new_data = source__norm_list[value].data;
+            if (checkbox.active.length == 1){
+                var new_data = source_norm_list[value].data;
             } else {
-            var new_data = source_list[value].data;
+                var new_data = source_list[value].data;
             }
 
             // apply blur
@@ -388,6 +390,7 @@ def return_code(widget):
             // apply changes
             source.change.emit();
             """
+
     elif widget == 'rbg':
         code = """
             var active = cb_obj.active;
@@ -406,49 +409,45 @@ def return_code(widget):
             }
 
             """
+
     elif widget == 'checkbox':
         code = """
-            var active = cb_obj.active
+
             var source_data = source.data;
-            var source_norm_list = source_norm_list;
             var source_list = source_list;
-            var value1 = slider1.value
-            var value2 = slider2.value
+            var source_norm_list = source_norm_list;
+            var active = cb_obj.active
+            var power = slider1.value
+            var value = slider2.value
+            var step_size = step_size
+            var value = Math.round(value/step_size)
             var mapper = mapper
 
-
-
             if (active.length == 1 ) {
+                    var new_data = source_norm_list[value].data
+                } else {
+                    var new_data = source_list[value].data
+                }
 
-            // replace source data with tfidf data
-            new_data = source_norm_list[value2*4].data
+            // replace dataset
             for (key in new_data) {
                 source_data[key] = [];
                 for (i=0;i<new_data[key].length;i++) {
                     source_data[key].push(new_data[key][i]);
-                    }
-                    }
-            } else {
-
-            // replace source data with data without tfidf
-            new_data = source_list[value2*4].data
-            for (key in new_data) {
-                source_data[key] = [];
-                for (i=0;i<new_data[key].length;i++) {
-                    source_data[key].push(new_data[key][i]);
-                    }
-                    }
+                }
             }
 
             // apply current saturation level
             for (var i = 0; i < source_data['blur'].length; i++) {
-                source_data['scaling'][i] = Math.pow(source_data['blur'][i], 1/value1)
+            source_data['scaling'][i] = Math.pow(source_data['blur'][i], 1/power)
             }
+
             // max value for mapper
             mapper.transform.high = Math.max.apply(Math, source_data['scaling'])
 
             source.change.emit();
             """
+
     elif widget == 'hover':
         code = """
             var tooltips = document.getElementsByClassName("bk-tooltip");
@@ -460,13 +459,13 @@ def return_code(widget):
                 tooltips[i].style.width = "500px";
             }
             """
+
     elif widget == 'button':
         code = """
-            var html_content = html_content
-            var wnd = window.open("about:blank", "", "_blank")
-            wnd.document.write(html_content)
+            var metadata = metadata;
+            var wnd = window.open("about:blank", "", "_blank");
+            wnd.document.write(metadata)
             """
-
     return code
 
 def return_html(metadata):
@@ -490,20 +489,55 @@ def return_html(metadata):
     """ % (metadata[0], metadata[0], metadata[1], metadata[2], metadata[3], metadata[4], metadata[5])
     return html_content
 
-def plot(term, table, metadata):
+def make_plot_source(table, term, size, ratio, orientation, blur_max, step_size):
+    '''
+    This function is used to make lists of datasources for the plot that can each be selected through use of the widgets.
+    These data sources are sources with or without normalization, and a range of applied blur (each blur is on a new dataset).
+
+    This funcion recieves:
+    - tables: results from the query search (chebi ids, mass, logp etc.), these will be used to create the x, y coordinates
+    - size, ratio, orientation: plot properties used to make the hexagonal bins
+    - blur_max, step_size: blur properties used to create gaussian blur
+
+    This function returns a dictionary with terms (names of the tables) as keys and lists of data sources as values.
+
+    '''
+
+    #create array
+    x, y, ids = create_array(table, normalization=False)
+    xn, yn, idsn = create_array(table, normalization=True)
+
+    # title
+    title = 'Hexbin plot for '+str(len(x))+' annotated chemicals with query '+str(term)
+
+    # make dataframe with counts
+    df = hexbin(x, y, ids, size, aspect_scale=ratio, orientation=orientation)
+    dfn = hexbin(xn, yn, idsn, size, aspect_scale=ratio, orientation=orientation)
+
+    # add counts for chemicals for hexagon
+    df = add_counts(df, table)
+    dfn = add_counts(dfn, table)
+
+    # add blur
+    source = construct_source_list(df, blur_max, step_size)
+    source_norm = construct_source_list(dfn, blur_max, step_size)
+
+    return source, source_norm, title
+
+def plot(table, metadata, term):
     '''
     This is the plot function that uses Bokeh functions and widgets to make an interactive hexagon plot.
 
     This function recieves:
-    - term: string used for the title of the plot and naming the output file.
-    - table: dictionary used to create arrays of repeated x, y coordinates (depending on the counts) for the hexagon plot.
-    - metadata: string of info that will be shown with the plot
+    - table: dictionary with chebi identifiers as keys and their (normalized) counts, mass, logP etc. as values
+    - metadata: metadata (date, query etc.)
+    - term: term used to name the output file
 
     The coordinate arrays are used to create a pandas dataframe with Bokeh functions. This dataframe contains the q, r coordinates and counts used to plot the
     hexagons. To this dataframe, extra information is added (e.g. most common chemicals), which is displayed in the hover tooltip.
 
     Gaussian blur is added to copies of this dataframe and given as input to the Bokeh slider widget.
-    Other widgets are added as well, for saturation, normalisation etc. Bokeh allows to customize these widges with javascript code.
+    Other widgets are added as well, for saturation, normalization etc. Bokeh allows to customize these widges with javascript code.
 
     The hexagon plot is saved as a .html file and also shown in the browser.
     '''
@@ -511,10 +545,16 @@ def plot(term, table, metadata):
     file_name = 'plots/'+str(term)+'.html'
     output_file(file_name)
 
-    x, y, ids = create_array(table, normalisation=False)
-    xn, yn, idsn = create_array(table, normalisation=True)
+    # Blur and saturation values
+    BLUR_MAX = 3
+    BLUR_STEP_SIZE = 0.5
+    SATURATION_MAX = 5
+    SATURATION_STEP_SIZE = 0.25
 
-    # hexagon plot properties
+    # First, create array for plot properties ( ratio, size of hexagons etc.)
+    x, y, ids = create_array(table, normalization=False)
+
+    # Hexagon plot properties
     length = len(x)
     orientation = 'flattop'
     ratio = ( (max(y)-min(y)) / (max(x)-min(x)) )
@@ -533,20 +573,13 @@ def plot(term, table, metadata):
     p.xaxis.axis_label_text_font_style = 'normal'
     p.yaxis.axis_label_text_font_style = 'normal'
 
-    # make dataframe with counts
+    # source for plot with blur for dataframes with and without normalization
+    source_list, source_norm_list, title = make_plot_source(table, term, size, ratio, orientation, BLUR_MAX, BLUR_STEP_SIZE)
+
+    # start source for plot, this is the source that is first displayed in the hexagon figure and is replaced whenever changes are made with the widgets
     df = hexbin(x, y, ids, size, aspect_scale=ratio, orientation=orientation)
-    dfn = hexbin(xn, yn, idsn, size, aspect_scale=ratio, orientation=orientation)
-
-    # add counts for hexagon
     df = add_counts(df, table)
-    dfn = add_counts(dfn, table)
-
-    # add gausian blur, add columns with names/counts, put dfs with blur in list
-    source_list = construct_source_list(df)
-    source_norm_list = construct_source_list(dfn)
-
-    # source for plot
-    source = ColumnDataSource(data=df)
+    source = ColumnDataSource(df)
 
     # color mapper
     mapper = linear_cmap('scaling', 'Viridis256', 0, max(source.data['scaling']))
@@ -563,8 +596,8 @@ def plot(term, table, metadata):
     p.add_tools(hover)
 
     # WIDGETS
-    slider1 = Slider(start=1, end=5, value=1, step=0.25, title="Saturation", width=100)
-    slider2 = Slider(start=0, end=4, value=0, step=0.25, title="Blur", width=100)
+    slider1 = Slider(start=1, end=SATURATION_MAX, value=1, step=SATURATION_STEP_SIZE, title="Saturation", width=100)
+    slider2 = Slider(start=0, end=BLUR_MAX, value=0, step=BLUR_STEP_SIZE, title="Blur", width=100)
     checkbox = CheckboxGroup(labels=["TFIDF"], active=[])
     radio_button_group = RadioGroup(labels=["Viridis256", "Greys256"], active=0)
     button = Button(label="Metadata",button_type="default", width=100)
@@ -576,49 +609,85 @@ def plot(term, table, metadata):
     code_callback_rbg = return_code('rbg')
     code_callback_button = return_code('button')
 
-    # HTML
-    html_content = return_html(metadata)
-
     # WIDGETS CALLBACK
     callback_slider1 = CustomJS(args={'source': source, 'mapper': mapper}, code=code_callback_slider1)
-    callback_slider2 = CustomJS(args={'source': source, 'source_list': source_list, 'source_norm_list': source_norm_list,
-        'slider1': slider1, 'checkbox': checkbox, 'mapper': mapper}, code=code_callback_slider2)
-    callback_checkbox = CustomJS(args={'source': source, 'source_norm_list': source_norm_list, 'source_list': source_list, 'mapper': mapper, 'slider1': slider1, 'slider2': slider2},
-        code=code_callback_checkbox)
+    callback_slider2 = CustomJS(args={'source': source, 'mapper': mapper, 'slider1': slider1, 'checkbox': checkbox, 'source_list': source_list,
+    'source_norm_list': source_norm_list, 'step_size': BLUR_STEP_SIZE}, code=code_callback_slider2)
+    callback_checkbox = CustomJS(args={'source': source, 'source_list': source_list, 'source_norm_list': source_norm_list, 'step_size': BLUR_STEP_SIZE,
+    'slider1': slider1, 'slider2': slider2, 'mapper': mapper}, code=code_callback_checkbox)
     callback_radio_button_group = CustomJS(args={'p': p, 'mapper': mapper, 'Viridis256': Viridis256, 'Greys256': Greys256}, code=code_callback_rbg)
-    button_callback = CustomJS(args={'html_content': html_content},code=code_callback_button)
+    callback_button = CustomJS(args={'metadata': metadata},code=code_callback_button)
 
     # WIDGETS INTERACTION
     slider1.js_on_change('value', callback_slider1)
     slider2.js_on_change('value', callback_slider2)
     checkbox.js_on_change('active', callback_checkbox)
     radio_button_group.js_on_change('active', callback_radio_button_group)
-    button.js_on_event(events.ButtonClick, button_callback)
+    button.js_on_event(events.ButtonClick, callback_button)
 
     # LAYOUT
     layout = row(p, column(slider1, slider2, checkbox, radio_button_group, button))
 
-    show(layout)
+    save(layout)
 
+def get_tables(files):
+    '''
+    This function recieves a list of files, imports these files and their corresponding metadata, and saves them in a dictionary.
+    '''
+    tables = dict()
+    for file in files:
+        table = import_table(file)
+        term = file.split('\\')[1].split('_')[0]
+        metadata = get_metadata(term)
+        tables[term] = {'table': table, 'metadata': metadata}
+    return tables
+
+def get_files(folder):
+    '''
+    This function recieves the input folder and returns a list of file paths in this folder.
+    '''
+    files = []
+    for file in listdir(folder):
+        path = str(folder)+'\\'+str(file)
+        files.append(path)
+    return files
+
+def get_metadata(term):
+    metadata_file = 'metadata/'+str(term)+'.txt'
+    metadata_lines = open(metadata_file, 'r')
+    metadata = metadata_lines.readlines()
+    return metadata
 
 def parser():
     parser = argparse.ArgumentParser(description='This script makes a table of the query IDs, their names and their properties')
-    parser.add_argument('-i', required=True, metavar='input_file', dest='input_file', help='[i] to select input file from the results folder')
+    parser.add_argument('-i', required=True, metavar='input', dest='input', help='[i] to select input')
+    parser.add_argument('-t', required=True, metavar='input_type', dest='input_type', help='[t] to select input type: folder or file')
     arguments = parser.parse_args()
     return arguments
 
 def main():
     startTime = datetime.now()
     args = parser()
-    file = args.input_file
-    table = import_table(file)
-    term = file.split('\\')[1].split('_')[0]
+    input = args.input
+    input_type = args.input_type
 
-    metadata_file = 'metadata/'+str(term)+'.txt'
-    metadata_lines = open(metadata_file, 'r')
-    metadata = metadata_lines.readlines()
+    if input_type == 'folder':
+        files = get_files(input)
+        tables = get_tables(files)
+        # plot all files in the folder
+        for term in tables.keys():
+            output_filename = term
+            table = table[term]
+            metadata = table[metadata]
+            print('plotting for %s ...' % term)
+            plot(table, metadata, term)
 
-    plot(term, table, metadata)
+    elif input_type == 'file':
+        # plot the file
+        table = import_table(input)
+        term = input.split('\\')[1].split('_')[0]
+        metadata = get_metadata(term)
+        plot(table, metadata, term)
 
     print(datetime.now() - startTime)
 
