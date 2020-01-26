@@ -4,13 +4,13 @@ import argparse
 import csv
 import ast
 import math
+import sys
 
 from os import listdir
 
 def read_searches(file, id_to_pubs, all_unique_pubs):
     '''
-    This function recieves a searches_by_year file, and a dictionary and set to append new information to.
-    For every searches_by_year file, all the publication ids and ChEBI IDs are extracted and added to the dictionaries.
+    This function recieves a searches_by_year file and two dictionaries to which it adds identifiers taken from the searches_by_year file.
     '''
     path = 'searches_by_year/'+str(file)
     print(path)
@@ -123,11 +123,9 @@ def read_file(file, key, data):
 
     return data
 
-def normalisation(id_to_counts, id_to_pubs, all_unique_pubs):
+def normalization(id_to_counts, id_to_pubs, all_unique_pubs):
     '''
-    This function recieves results from the query search (id_to_counts), and results from the searches_by_year (id_to_pub and a set unique chemicals).
-    These are used to normalise the counts with TFIDF (see https://en.wikipedia.org/wiki/Tf%E2%80%93idf).
-    The function returns a dictionary with the chebi ids as keys and normalised counts (tfidf) as values.
+    This function performs the tfidf normalization ( see https://en.wikipedia.org/wiki/Tf%E2%80%93idf )
     '''
     N = len(all_unique_pubs)
     id_to_tfidf = dict()
@@ -146,29 +144,48 @@ def normalisation(id_to_counts, id_to_pubs, all_unique_pubs):
 
 def parser():
     parser = argparse.ArgumentParser(description='This script makes a table of the query IDs, their names and their properties')
-    parser.add_argument('-i', required=False, metavar='input_file', dest='input_file', help='[i] to select input file from the results folder')
+    parser.add_argument('-i', required=True, metavar='input', dest='input', help='[i] to select input folder or input file from the results folder ')
+    parser.add_argument('-t', required=True, metavar='type', dest='type', help='[t] to select type of input: file or folder')
     arguments = parser.parse_args()
     return arguments
 
 def main():
     args = parser()
-    results = args.input_file
+    input_type = args.type
+    input = args.input
+    if input_type == 'file':
+        results = [input]
+    elif input_type == 'folder':
+        files = listdir('results')
+        results = []
+        for file in files:
+            result = 'results\\'+str(file)
+            results.append(result)
+    else:
+        sys.exit('Error: please give \'file\' or \'folder\' as input type')
 
     # get the counts and unique publications for allt he chebi id's, plus the search term
-    id_to_counts, id_to_publications, term = read_input(results)
+    term_to_result = dict()
+    for result in results:
+        id_to_counts, id_to_publications, term = read_input(result)
+        term_to_result[term] = {"counts": id_to_counts, "publications": id_to_publications}
 
-    # get unique publications for all chebi id's since 2005 (?)
-    print('reading files for normalisation...')
+
+    # get unique publications for all publications since 2005 (?)
+    print('reading files for normalization...')
     searches_by_year = listdir('searches_by_year')
-    id_to_pubs = dict()
-    all_unique_pubs = set()
+    all_ids_to_publication = dict()
+    all_publications = set()
     for file in searches_by_year:
         if '.csv' in file:
-            id_to_pubs, all_unique_pubs = read_searches(file, id_to_pubs, all_unique_pubs)
+            all_ids_to_publication, all_publications = read_searches(file, all_ids_to_publication, all_publications)
 
-    # normalisation
-    print('perform normalisation (tfidf)...')
-    id_to_tfidf = normalisation(id_to_counts, id_to_pubs, all_unique_pubs)
+    # normalization
+    print('perform normalization...')
+    for term in term_to_result.keys():
+        id_to_counts = term_to_result[term]['counts']
+        id_to_tfidf = normalization(id_to_counts, all_ids_to_publication, all_publications)
+        term_to_result[term]['tfidf'] = id_to_tfidf
 
     # get properties for the chebi ids from the chebi files
     print('reading files with properties...')
@@ -180,8 +197,11 @@ def main():
 
     # make table with chebi ids found in the search (all chebi ids in id_to_counts) plus their normalized counts (id_to_tfidf) and all properties (data)
     print('making the table...')
-    table = make_table(data, id_to_tfidf, id_to_counts)
-    write_table(table, term)
+    for term in term_to_result.keys():
+        id_to_tfidf = term_to_result[term]['tfidf']
+        id_to_counts = term_to_result[term]['counts']
+        table = make_table(data, id_to_tfidf, id_to_counts)
+        write_table(table, term)
 
 if __name__ == '__main__':
     main()
