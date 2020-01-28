@@ -193,7 +193,7 @@ def read_input(file):
 def parser():
     parser = argparse.ArgumentParser(description='A script that parses JSON data from EPC publications and extracts annotations of type Chemicals')
     parser.add_argument('-i', required=True, metavar='input_file', dest='input_file', help='[i] to select input file from the queries folder')
-    parser.add_argument('-p', required=False, metavar='pageSize', dest='pageSize', help='[p] to select pageSize')
+    parser.add_argument('-p', required=False, metavar='pageSize', dest='pageSize', help='[p] to select pageSize, not required, defeault=1000')
     arguments = parser.parse_args()
     return arguments
 
