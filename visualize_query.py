@@ -470,7 +470,7 @@ def return_code(widget):
 
 def return_html(metadata):
     '''
-    This function recieves the metadata. The metadata is put in the html string and this string returned.
+    This function recieves the metadata. The metadata is put in a html string and this string returned.
     '''
     html_content = """
     <HTML>
@@ -547,7 +547,7 @@ def plot(table, metadata, term):
 
     # Blur and saturation values
     BLUR_MAX = 3
-    BLUR_STEP_SIZE = 0.5
+    BLUR_STEP_SIZE = 0.25
     SATURATION_MAX = 5
     SATURATION_STEP_SIZE = 0.25
 
@@ -627,7 +627,6 @@ def plot(table, metadata, term):
 
     # LAYOUT
     layout = row(p, column(slider1, slider2, checkbox, radio_button_group, button))
-
     save(layout)
 
 def get_tables(files):
@@ -656,6 +655,7 @@ def get_metadata(term):
     metadata_file = 'metadata/'+str(term)+'.txt'
     metadata_lines = open(metadata_file, 'r')
     metadata = metadata_lines.readlines()
+    metadata = return_html(metadata)
     return metadata
 
 def parser():
@@ -677,8 +677,8 @@ def main():
         # plot all files in the folder
         for term in tables.keys():
             output_filename = term
-            table = table[term]
-            metadata = table[metadata]
+            table = tables[term]['table']
+            metadata = tables[term]['metadata']
             print('plotting for %s ...' % term)
             plot(table, metadata, term)
 
