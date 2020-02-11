@@ -1,4 +1,5 @@
 #!/usr/bin/python
+import time
 
 import numpy as np
 import pandas as pd
@@ -48,7 +49,7 @@ def import_table(file):
 
     return table
 
-def create_array(table, normalisation):
+def create_array(table, normalization):
     '''
     This function recieves the table dictionary and returns numpy arrays with the mass, logP and names of the chemicals.
     These values and names are repeated corresponding to the count value.
@@ -56,9 +57,20 @@ def create_array(table, normalisation):
     x = []
     y = []
     ids = []
+    counts_total = 0
+    tfidf_total = 0
     for id in table.keys():
-        if normalisation:
+        counts_total += table[id]['Count']
+        tfidf_total += table[id]['TFIDF']
+
+    normalizing_factor = counts_total / tfidf_total
+
+    list_counts = []
+    for id in table.keys():
+        if normalization:
             count = table[id]["TFIDF"]
+            count = int(count * normalizing_factor)+1
+            list_counts.append(count)
         else:
             count = table[id]["Count"]
         mass = table[id]["Mass"]
@@ -66,6 +78,7 @@ def create_array(table, normalisation):
         x.extend([logP]*count)
         y.extend([mass]* count)
         ids.extend([id]*count)
+
     return np.asarray(x), np.asarray(y), ids
 
 def hexbin(x, y, ids, size, aspect_scale, orientation):
@@ -74,17 +87,14 @@ def hexbin(x, y, ids, size, aspect_scale, orientation):
     Additionally, the center x, y coordinates for every hexagon are added.
     '''
     q, r = cartesian_to_axial(x, y, size, orientation=orientation, aspect_scale=aspect_scale)
-    x, y = axial_to_cartesian(q, r, size, orientation=orientation, aspect_scale=aspect_scale)
-    df = pd.DataFrame(dict(r=r, q=q, x=x, y=y))
+    df = pd.DataFrame(dict(r=r, q=q))
     df['ids'] = ids
-    df = df.groupby(['q', 'r', 'x', 'y'])['ids'].apply(list).reset_index(name='ids')
-
+    df = df.groupby(['q', 'r'])['ids'].apply(list).reset_index(name='ids')
     counts = []
     for row in df['ids']:
         counts.append(len(row))
 
     df['counts'] = counts
-
     return df
 
 def find_most_common(list_names, tooltip_count):
@@ -300,10 +310,13 @@ def add_gaussian_blur(df, blur_max, step_size):
                     # All columns (see keys) need to be added here or else Bokeh will crash, but most values will be left empty
                     if sd_x == 0:
                         # make the row
-                        coords_to_blur[(q_new, r_new)] = {'q': q_new, 'r': r_new, column_name: [counts_blur, tfidf_blur], 'x': '-', 'y': '-','counts': 0, 'tfidf': 0, 'scaling': 0, 'ids': [],
+                        coords_to_blur[(q_new, r_new)] = {'q': q_new, 'r': r_new, column_name: [counts_blur, tfidf_blur], 'counts': 0, 'tfidf': 0, 'scaling': 0, 'ids': [],
                         'id1': '', 'count1': '', 'name1': '',
                         'id2': '', 'count2': '', 'name2': '',
-                        'id3': '', 'count3': '', 'name3': ''}
+                        'id3': '', 'count3': '', 'name3': '',
+                        'id1_tfidf': '', 'count1_tfidf': '', 'name1_tfidf': '',
+                        'id2_tfidf': '', 'count2_tfidf': '', 'name2_tfidf': '',
+                        'id3_tfidf': '', 'count3_tfidf': '', 'name3_tfidf': ''}
                     else:
                         # row should already be there, only need to add column value
                         coords_to_blur[(q_new, r_new)][column_name] = [counts_blur, tfidf_blur]
@@ -322,67 +335,201 @@ def add_gaussian_blur(df, blur_max, step_size):
         # add column to the df
         df_gaussian[column_name] = column_list
 
+    df_gaussian = df_gaussian.drop("ids", axis=1)
     return df_gaussian
 
-def return_tooltip():
+def merge_dataframes(df_normal, df_tfidf):
+    df_normal['tfidf'] = df_tfidf['counts']
+    df_normal['id1_tfidf'] = df_tfidf['id1']
+    df_normal['id2_tfidf'] = df_tfidf['id2']
+    df_normal['id3_tfidf'] = df_tfidf['id3']
+    df_normal['count1_tfidf'] = df_tfidf['count1']
+    df_normal['count2_tfidf'] = df_tfidf['count2']
+    df_normal['count3_tfidf'] = df_tfidf['count3']
+    df_normal['name1_tfidf'] = df_tfidf['name1']
+    df_normal['name2_tfidf'] = df_tfidf['name2']
+    df_normal['name3_tfidf'] = df_tfidf['name3']
+    return df_normal
+
+def create_data_source(table, term, size, ratio, orientation, BLUR_MAX, BLUR_STEP_SIZE):
+    # create array
+    x, y, ids = create_array(table, normalization=False)
+    xn, yn, idsn = create_array(table, normalization=True)
+
+    # title
+    title = 'Hexbin plot for '+str(len(x))+' annotated chemicals with query '+str(term)
+
+    # make dataframe with counts
+    df = hexbin(x, y, ids, size, aspect_scale=ratio, orientation=orientation)
+    dfn = hexbin(xn, yn, idsn, size, aspect_scale=ratio, orientation=orientation)
+
+    # add counts for chemicals for hexagon
+    df = add_counts(df, table)
+    dfn = add_counts(dfn, table)
+    df = merge_dataframes(df, dfn)
+    df = add_gaussian_blur(df, BLUR_MAX, BLUR_STEP_SIZE)
+    source = ColumnDataSource(df)
+
+    return source, title
+
+def make_plot_sources(tables, size, ratio, orientation, blur_max, step_size):
     '''
-    This function returns the HTML code for the hover tooltip.
+    This function is used to make lists of datasources for the plot that can each be selected through use of the widgets.
+    These data sources are sources with or without normalization, and a range of applied blur (each blur is on a new dataset).
+
+    This funcion recieves:
+    - tables: results from the query search (chebi ids, mass, logp etc.), these will be used to create the x, y coordinates
+    - size, ratio, orientation: plot properties used to make the hexagonal bins
+    - blur_max, step_size: blur properties used to create gaussian blur
+
+    This function returns a dictionary with terms (names of the tables) as keys and lists of data sources as values.
+
     '''
-    code = """
-    <style>
-    table, td, th {
-      border-collapse: collapse;
-      border: 1px solid #dddddd;
-      padding: 2px;
-      table-layout: fixed;
-      height: 20px;
-    }
 
-    tr:nth-child(even) {
-      background-color: #dddddd;
-    }
-    </style>
+    term_to_source = dict()
+    term_to_metadata = dict()
+    options = []
 
-    <table>
-      <col width="100">
-      <col width="80">
-      <col width="220">
-      <tr>
-        <th>Total Counts</th>
-        <th>@counts</th>
-        <th>(@x,@y)</th>
-      </tr>
-      <tr style="color: #fff; background: black;">
-        <th>Chebi ID</th>
-        <th>Count</th>
-        <th>Name</th>
-      </tr>
-      <tr>
-        <th>@id1</th>
-        <th>@count1</th>
-        <th>@name1</th>
-      </tr>
-      <tr>
-        <th>@id2</th>
-        <th>@count2</th>
-        <th>@name2</th>
-      </tr>
-      <tr>
-        <th>@id3</th>
-        <th>@count3</th>
-        <th>@name3</th>
-      </tr>
-    </table>
+    for term in tables.keys():
+        print('making dataframe for %s ...' % term)
+        # options for multi select
+        options.append((term, term))
+        metadata = tables[term]['metadata']
+        metadata = return_html(metadata)
+        table = tables[term]['table']
+        # tables[term]['table'] = [] # delete from memory ## DOENST WORK
 
-    """
-    return code
 
-def return_code(widget):
+        #create array
+        x, y, ids = create_array(table, normalization=False)
+        xn, yn, idsn = create_array(table, normalization=True)
+
+        # title
+        title = 'Hexbin plot for '+str(len(x))+' annotated chemicals with query '+str(term)
+
+
+        df = hexbin(x, y, ids, size, aspect_scale=ratio, orientation=orientation)
+        dfn = hexbin(xn, yn, idsn, size, aspect_scale=ratio, orientation=orientation)
+
+        # add counts for chemicals for hexagon
+        df = add_counts(df, table)
+        dfn = add_counts(dfn, table)
+
+        # MERGE DFS
+
+        df = add_gaussian_blur(df, blur_max, step_size)
+        source = ColumnDataSource(df)
+
+        # Add litst to dictionary
+        term_to_source[term] = {'source': source, 'title': title}
+        term_to_metadata[term] = metadata
+
+
+    return term_to_source, term_to_metadata, options
+
+def return_JS_code(widget):
     '''
     This function recieves a string that indicates the widget.
-    It returns a javascript callback code corresponding to the widget.
+    It returns a JavaScript callback code corresponding to the widget.
     '''
-    if widget == 'slider1':
+    if widget == 'tooltips':
+        code = """
+            <style>
+            table, td, th {
+              border-collapse: collapse;
+              border: 1px solid #dddddd;
+              padding: 2px;
+              table-layout: fixed;
+              height: 20px;
+            }
+
+            tr:nth-child(even) {
+              background-color: #dddddd;
+            }
+            </style>
+
+            <table>
+              <col width="100">
+              <col width="80">
+              <col width="220">
+              <tr>
+                <th>Total Counts</th>
+                <th>@counts</th>
+                <th>($x, $y)</th>
+              </tr>
+              <tr style="color: #fff; background: black;">
+                <th>Chebi ID</th>
+                <th>Count</th>
+                <th>Name</th>
+              </tr>
+              <tr>
+                <th>@id1</th>
+                <th>@count1</th>
+                <th>@name1</th>
+              </tr>
+              <tr>
+                <th>@id2</th>
+                <th>@count2</th>
+                <th>@name2</th>
+              </tr>
+              <tr>
+                <th>@id3</th>
+                <th>@count3</th>
+                <th>@name3</th>
+              </tr>
+            </table>
+
+            """
+    elif widget == 'tooltips_tfidf':
+        code = """
+            <style>
+            table, td, th {
+              border-collapse: collapse;
+              border: 1px solid #dddddd;
+              padding: 2px;
+              table-layout: fixed;
+              height: 20px;
+            }
+
+            tr:nth-child(even) {
+              background-color: #dddddd;
+            }
+            </style>
+
+            <table>
+              <col width="100">
+              <col width="80">
+              <col width="220">
+              <tr>
+                <th>Total Counts</th>
+                <th>@tfidf</th>
+                <th>($x, $y)</th>
+              </tr>
+              <tr style="color: #fff; background: black;">
+                <th>Chebi ID</th>
+                <th>Count</th>
+                <th>Name</th>
+              </tr>
+              <tr>
+                <th>@id1_tfidf</th>
+                <th>@count1_tfidf</th>
+                <th>@name1_tfidf</th>
+              </tr>
+              <tr>
+                <th>@id2_tfidf</th>
+                <th>@count2_tfidf</th>
+                <th>@name2_tfidf</th>
+              </tr>
+              <tr>
+                <th>@id3_tfidf</th>
+                <th>@count3_tfidf</th>
+                <th>@name3_tfidf</th>
+              </tr>
+            </table>
+
+            """
+
+    elif widget == 'slider1':
         code = """
             var mapper = mapper
             var source_data = source.data;
@@ -461,7 +608,9 @@ def return_code(widget):
 
     elif widget == 'checkbox':
         code = """
-
+            var hover = hover;
+            var tooltips = tooltips
+            var tooltips_tfidf = tooltips_tfidf
             var source_data = source.data;
             var active = cb_obj.active
             var f = slider1.value
@@ -476,11 +625,16 @@ def return_code(widget):
             for (var i = 0; i < source_data[sd_x].length; i++) {
                 source_data['scaling'][i] = Math.pow(source_data[sd_x][i][1], 1/f)
                 }
+
+            hover.tooltips = tooltips_tfidf
+
             } else {
 
             for (var i = 0; i < source_data[sd_x].length; i++) {
                 source_data['scaling'][i] = Math.pow(source_data[sd_x][i][0], 1/f)
                 }
+
+            hover.tooltips = tooltips
             }
 
             // max value for mapper
@@ -579,60 +733,9 @@ def return_html(metadata):
     """ % (metadata[0], metadata[0], metadata[1], metadata[2], metadata[3], metadata[4], metadata[5])
     return html_content
 
-def make_plot_sources(tables, size, ratio, orientation, blur_max, step_size):
-    '''
-    This function is used to make lists of datasources for the plot that can each be selected through use of the widgets.
-    These data sources are sources with or without normalization, and a range of applied blur (each blur is on a new dataset).
 
-    This funcion recieves:
-    - tables: results from the query search (chebi ids, mass, logp etc.), these will be used to create the x, y coordinates
-    - size, ratio, orientation: plot properties used to make the hexagonal bins
-    - blur_max, step_size: blur properties used to create gaussian blur
 
-    This function returns a dictionary with terms (names of the tables) as keys and lists of data sources as values.
-
-    '''
-
-    term_to_source = dict()
-    term_to_metadata = dict()
-    options = []
-
-    for term in tables.keys():
-        print('making dataframe for %s ...' % term)
-        # options for multi select
-        options.append((term, term))
-
-        metadata = tables[term]['metadata']
-        metadata = return_html(metadata)
-        table = tables[term]['table']
-
-        #create array
-        x, y, ids = create_array(table, normalisation=False)
-        xn, yn, idsn = create_array(table, normalisation=True)
-
-        # title
-        title = 'Hexbin plot for '+str(len(x))+' annotated chemicals with query '+str(term)
-
-        # make dataframe with counts
-        df = hexbin(x, y, ids, size, aspect_scale=ratio, orientation=orientation)
-        dfn = hexbin(xn, yn, idsn, size, aspect_scale=ratio, orientation=orientation)
-
-        # add counts for chemicals for hexagon
-        df = add_counts(df, table)
-        dfn = add_counts(dfn, table)
-        df['tfidf'] = dfn['counts']
-
-        # add blur
-        df_gaussian = add_gaussian_blur(df, blur_max, step_size)
-        source = ColumnDataSource(df_gaussian)
-
-        # Add litst to dictionary
-        term_to_source[term] = {'source': source, 'title': title}
-        term_to_metadata[term] = metadata
-
-    return term_to_source, term_to_metadata, options
-
-def plot(tables, output_filename):
+def plot(tables, output_filename, xmin, xmax, ymin, ymax, superterm):
     '''
     This is the plot function that uses Bokeh functions and widgets to make an interactive hexagon plot.
 
@@ -644,7 +747,7 @@ def plot(tables, output_filename):
     hexagons. To this dataframe, extra information is added (e.g. most common chemicals), which is displayed in the hover tooltip.
 
     Gaussian blur is added to copies of this dataframe and given as input to the Bokeh slider widget.
-    Other widgets are added as well, for saturation, normalisation etc. Bokeh allows to customize these widges with javascript code.
+    Other widgets are added as well, for saturation, normalization etc. Bokeh allows to customize these widges with javascript code.
 
     The hexagon plot is saved as a .html file and also shown in the browser.
     '''
@@ -658,21 +761,16 @@ def plot(tables, output_filename):
     SATURATION_MAX = 5
     SATURATION_STEP_SIZE = 0.25
 
-    # First, create array for plot properties ( ratio, size of hexagons etc.)
-    default_term = list(tables.keys())[0]
-    x, y, ids = create_array(tables[default_term]['table'], normalisation=False)
-
     # Hexagon plot properties
-    length = len(x)
-    orientation = 'flattop'
-    ratio = ( (max(y)-min(y)) / (max(x)-min(x)) )
-    size = 10 / ratio
-    h = sqrt(3) * size
-    h = h*ratio
-    title = 'Hexbin plot for '+str(length)+' annotated chemicals with query '+str(default_term)
+    SIZE_HEXAGONS = 10
+    orientation = 'flattop' #bokeh alows 2 different hexagon orientations which also influences hexagon size calculations, but we currently have only calculated blur distances for this orientation
+    ratio = ((ymax-ymin) / (xmax-xmin) )
+    size = SIZE_HEXAGONS / ratio
+    hexagon_height = sqrt(3) * size
+    hexagon_height = hexagon_height*ratio
 
     # make figure
-    p = figure(title=title, x_range = [-5, 10],y_range=[0-(h/2), 1600],
+    p = figure(x_range = [xmin, xmax],y_range=[ymin-(hexagon_height/2), ymax],
                tools="wheel_zoom,reset,save", background_fill_color= '#440154')
 
     p.grid.visible = False
@@ -681,31 +779,27 @@ def plot(tables, output_filename):
     p.xaxis.axis_label_text_font_style = 'normal'
     p.yaxis.axis_label_text_font_style = 'normal'
 
-    # source for plot
-    term_to_source, term_to_metadata, options = make_plot_sources(tables, size, ratio, orientation, BLUR_MAX, BLUR_STEP_SIZE)
+    # term_to_source, term_to_metadata, options = make_plot_sources(tables, size, ratio, orientation, BLUR_MAX, BLUR_STEP_SIZE)
 
-    # make default souce for plot, this is the first source shown in the plot, and also works like a container. Old data is thrown out and new data is thrown in when using widgets. 
+    # source for widgets
+    term_to_source = dict()
+    term_to_metadata = dict()
+    options = []
+    for term in tables.keys():
+        options.append((term, term))
+        table = tables[term]['table']
+        source, title = create_data_source(table, term, size, ratio, orientation, BLUR_MAX, BLUR_STEP_SIZE)
+        metadata = return_html(tables[term]['metadata'])
+        term_to_source[term] = {'source': source, 'title': title}
+        term_to_metadata[term] = metadata
+
+    # make default souce for plot, this is the first source shown in the plot, and also works like a container. Old data is thrown out and new data is thrown in.
+    default_term = list(tables.keys())[0] # pick the first one
     metadata = tables[default_term]['metadata']
     metadata = return_html(metadata)
     table = tables[default_term]['table']
-
-    # create array
-    x, y, ids = create_array(table, normalisation=False)
-    xn, yn, idsn = create_array(table, normalisation=True)
-
-    # title
-    title = 'Hexbin plot for '+str(len(x))+' annotated chemicals with query '+str(default_term)
-
-    # make dataframe with counts
-    df = hexbin(x, y, ids, size, aspect_scale=ratio, orientation=orientation)
-    dfn = hexbin(xn, yn, idsn, size, aspect_scale=ratio, orientation=orientation)
-
-    # add counts for chemicals for hexagon
-    df = add_counts(df, table)
-    dfn = add_counts(dfn, table)
-    df['tfidf'] = dfn['counts']
-    df = add_gaussian_blur(df, BLUR_MAX, BLUR_STEP_SIZE)
-    source = ColumnDataSource(df)
+    source, title = create_data_source(table, default_term, size, ratio, orientation, BLUR_MAX, BLUR_STEP_SIZE)
+    p.title.text = title
 
     # color mapper
     mapper = linear_cmap('scaling', 'Viridis256', 0, max(source.data['scaling']))
@@ -715,8 +809,9 @@ def plot(tables, output_filename):
            fill_color=mapper)
 
     # HOVER
-    TOOLTIPS = return_tooltip()
-    code_callback_hover = return_code('hover')
+    TOOLTIPS = return_JS_code('tooltips')
+    TOOLTIPS_tfidf = return_JS_code('tooltips_tfidf')
+    code_callback_hover = return_JS_code('hover')
     callback_hover = CustomJS(code=code_callback_hover)
     hover = HoverTool(tooltips=TOOLTIPS, callback=callback_hover, show_arrow=False)
     p.add_tools(hover)
@@ -728,19 +823,19 @@ def plot(tables, output_filename):
     radio_button_group = RadioGroup(labels=["Viridis256", "Greys256"], active=0)
     button = Button(label="Metadata",button_type="default", width=100)
     multi_select = MultiSelect(title=output_filename, value=[default_term],options=options, width=100, height=300)
-    #
+
     # WIDGETS CODE FOR CALLBACK
-    code_callback_slider1 = return_code('slider1')
-    code_callback_slider2 = return_code('slider2')
-    code_callback_checkbox = return_code('checkbox')
-    code_callback_rbg = return_code('rbg')
-    code_callback_button = return_code('button')
-    code_callback_ms = return_code('multi_select')
+    code_callback_slider1 = return_JS_code('slider1')
+    code_callback_slider2 = return_JS_code('slider2')
+    code_callback_checkbox = return_JS_code('checkbox')
+    code_callback_rbg = return_JS_code('rbg')
+    code_callback_button = return_JS_code('button')
+    code_callback_ms = return_JS_code('multi_select')
 
     # WIDGETS CALLBACK
     callback_slider1 = CustomJS(args={'source': source, 'mapper': mapper, 'slider2': slider2, 'checkbox': checkbox}, code=code_callback_slider1)
     callback_slider2 = CustomJS(args={'source': source, 'mapper': mapper, 'slider1': slider1, 'checkbox': checkbox}, code=code_callback_slider2)
-    callback_checkbox = CustomJS(args={'source': source, 'slider1': slider1, 'slider2': slider2, 'mapper': mapper}, code=code_callback_checkbox)
+    callback_checkbox = CustomJS(args={'source': source, 'slider1': slider1, 'slider2': slider2, 'mapper': mapper, 'hover': hover, 'tooltips': TOOLTIPS, 'tooltips_tfidf': TOOLTIPS_tfidf}, code=code_callback_checkbox)
     callback_radio_button_group = CustomJS(args={'p': p, 'mapper': mapper, 'Viridis256': Viridis256, 'Greys256': Greys256}, code=code_callback_rbg)
     callback_button = CustomJS(args={'term_to_metadata': term_to_metadata, 'multi_select': multi_select},code=code_callback_button)
     callback_ms = CustomJS(args={'source': source, 'term_to_source': term_to_source, 'checkbox': checkbox, 'slider2': slider2, 'slider1': slider1, 'p': p, 'mapper': mapper}, code=code_callback_ms)
@@ -787,6 +882,10 @@ def parser():
     parser = argparse.ArgumentParser(description='This script makes a table of the query IDs, their names and their properties')
     parser.add_argument('-i', required=True, metavar='input_folder', dest='input_folder', help='[i] to select input folder')
     parser.add_argument('-o', required=True, metavar='output_filename', dest='output_filename', help='[o] to name .html output filename (a \'plots\' folder is required!)')
+    parser.add_argument('-xmin', required=False, metavar='xmin', dest='xmin', help='[xmin] to select x axis minimum (logP), default is -5')
+    parser.add_argument('-xmax', required=False, metavar='xmax', dest='xmax', help='[xmax] to select x axis maximum (logP), default is 10')
+    parser.add_argument('-ymax', required=False, metavar='ymax', dest='ymax', help='[ymax] to select y axix maximum (mass in Da), default is 1600')
+    parser.add_argument('-c', required=False, metavar='superterm', dest='superterm', help='[c] to select a class to be shown in the plot with a click on the class button')
     arguments = parser.parse_args()
     return arguments
 
@@ -795,12 +894,23 @@ def main():
     args = parser()
     folder = args.input_folder
     output_filename = args.output_filename
+    xmin = float(args.xmin)
+    xmax = float(args.xmax)
+    ymax = float(args.ymax)
+
+    # default settings
+    if not xmin:
+        xmin = -5
+    if not xmax:
+        xmax = 10
+    if not ymax:
+        ymax = 1600
+    ymin = 0 # cannot be negative
 
     files = get_files(folder)
     tables = get_tables(files)
 
-    plot(tables, output_filename)
-
+    plot(tables, output_filename, xmin, xmax, ymin, ymax, args.superterm)
     print(datetime.now() - startTime)
 
 if __name__ == '__main__':
