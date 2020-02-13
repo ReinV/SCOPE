@@ -4,11 +4,8 @@ This toolbox contains python scripts that follow the [EuropePMC2ChEBI KNIME work
 # Workflow
 ![Workflow scheme](workflow_scheme.png)
 
-# Using extern model to predict aqueous solubility
-Not shown in this workflow is the making of the ChEBI2logP and ChEBI2logS files in the 'files' folder.
-These properties can be acquired by uploading the smiles of new chemicals (in the 'new_smiles.txt' files) on the [ochem.eu site](https://ochem.eu),
-and select the 'ALogPS3.0' model that predicts these properties. After applying the model, only select 'properties' to show in the output .csv file.
-The 'predictions_to_file.py' script connects the predictions to the correct ChEBI identifier and writes these in .tsv files.
+# Using external models to predict polarity and aqueous solubility 
+Not shown in this workflow is the making of the ChEBI2logP and ChEBI2logS files in the 'files' folder. These properties can be acquired by uploading the SMILEs of new chemicals (in the 'new_smiles.txt' files) on the [ochem.eu site](https://ochem.eu), and select the 'ALogPS3.0' model that predicts these properties. After applying the model, only select 'properties' to show in the output .csv file. The 'predictions_to_file.py' script connects the predictions to the correct ChEBI identifier and writes these in .tsv files.
 
 
 # What's in the Toolbox
@@ -40,10 +37,11 @@ This script takes query searches in a text file from the 'queries' folder as inp
 This scripts takes the results from the 'results' folder as input, as well as the ChEBI files in the 'files' folder, and makes a table for every chemical containing its ID, count, mass, etc. This table is stored as a .tsv file in the 'tables' folder. Additionally, counts from the chemicals are normalized with [term frequency inversed document frequency](https://en.wikipedia.org/wiki/Tf%E2%80%93idf), using the data in the 'searches_by_year' folder.
 
 ### visualize_query.py
-  This script takes a table from the 'tables' folder as an input. These counts are then shown in interactive hexabin plots with mass on y-axis and logP on x-axis using the Bokeh Library.
+This script takes a table from the 'tables' folder as an input. These counts are then shown in interactive hexabin plots with mass on y-axis and logP on x-axis using the Bokeh Library.
 
 
 ## Run only once (per month) scripts
+The following need only be run at most once a month, as this is the current (February 2020) update frequency of the ChEBI ontology itself.
 
 ### update_chebis_test.py
 This script checks the [latest ChEBI ontology](ftp://ftp.ebi.ac.uk/pub/databases/chebi/ontology/) version and compares its version number to the version number in the 'ontology_version.txt' file in the 'files' folder.
