@@ -2,7 +2,7 @@
 This toolbox contains python scripts that follow the [EuropePMC2ChEBI KNIME workflow](https://github.com/magnuspalmblad/EuropePMC2ChEBI). In this workflow, annotated chemicals are collected through literature searches via the [Europe PMC site](https://europepmc.org/). Properties of these chemicals can be visualized in interactive plots using the [Bokeh library](https://bokeh.pydata.org). This allows comparison between the data of different query searches, for example detecting bias in different analytical chemical techniques.
 
 # Workflow
-![Workflow scheme](workflow_scheme.png)
+![Workflow scheme](workflow_scheme_new_adjusted.png)
 
 # Using external models to predict polarity and aqueous solubility 
 Not shown in this workflow is the making of the ChEBI2logP and ChEBI2logS files in the 'files' folder. These properties can be acquired by uploading the SMILEs of new chemicals (in the 'new_smiles.txt' files) on the [ochem.eu site](https://ochem.eu), and select the 'ALogPS3.0' model that predicts these properties. After applying the model, only select 'properties' to show in the output .csv file. The 'predictions_to_file.py' script connects the predictions to the correct ChEBI identifier and writes these in .tsv files.
