@@ -644,18 +644,19 @@ def return_JS_code(widget):
             var Viridis256 = Viridis256;
             var Greys256 = Greys256;
             var class_hex = class_hex;
+            var term_to_class = term_to_class;
+            var term = multi_select.value[0]
 
-            console.log(class_hex)
             if (active == 1){
             mapper.transform.palette = Greys256
             p.background_fill_color = '#000000'
-            class_hex.glyph.fill_color = 'red'
+            if (term_to_class[term]['show_class']){class_hex.glyph.fill_color = 'red'}
             }
 
             if (active == 0){
             mapper.transform.palette = Viridis256
             p.background_fill_color = '#440154'
-            class_hex.glyph.fill_color = 'pink'
+            if(term_to_class[term]['show_class']){class_hex.glyph.fill_color = 'pink'}
             }
 
             """
@@ -767,10 +768,8 @@ def return_JS_code(widget):
 
             // class
             if (term_to_class[term]['show_class']){
-                console.log(term_to_class[term]['show_class'])
                 class_hex.visible = false
                 class_hex.source = term_to_class[term]['source']
-                console.log(class_hex.source)
                 checkbox_class.active = []
             }
             source.change.emit();
@@ -781,7 +780,7 @@ def return_JS_code(widget):
             var multi_select = multi_select;
             var class_hex = class_hex;
             var active = cb_obj.active;
-            console.log(active.length)
+
             if (active.length == 1) {
                 class_hex.visible = true
             } else {
@@ -937,10 +936,11 @@ def plot(tables, output_filename, xmin, xmax, ymin, ymax, superterm):
     callback_slider1 = CustomJS(args={'source': source, 'mapper': mapper, 'slider2': slider2, 'checkbox': checkbox}, code=code_callback_slider1)
     callback_slider2 = CustomJS(args={'source': source, 'mapper': mapper, 'slider1': slider1, 'checkbox': checkbox}, code=code_callback_slider2)
     callback_checkbox = CustomJS(args={'source': source, 'slider1': slider1, 'slider2': slider2, 'mapper': mapper, 'hover': hover, 'tooltips': TOOLTIPS, 'tooltips_tfidf': TOOLTIPS_tfidf}, code=code_callback_checkbox)
-    callback_radio_button_group = CustomJS(args={'p': p, 'class_hex': class_hex, 'mapper': mapper, 'Viridis256': Viridis256, 'Greys256': Greys256}, code=code_callback_rbg)
+    callback_radio_button_group = CustomJS(args={'p': p, 'multi_select': multi_select, 'mapper': mapper, 'term_to_class': term_to_class, 'Viridis256': Viridis256, 'Greys256': Greys256}, code=code_callback_rbg)
     callback_button = CustomJS(args={'term_to_metadata': term_to_metadata, 'multi_select': multi_select},code=code_callback_button)
     callback_ms = CustomJS(args={'source': source, 'term_to_source': term_to_source,  'term_to_class': term_to_class, 'checkbox': checkbox, 'slider2': slider2, 'slider1': slider1, 'p': p, 'mapper': mapper}, code=code_callback_ms)
     if superterm:
+        callback_radio_button_group = CustomJS(args={'p': p, 'multi_select': multi_select, 'class_hex': class_hex, 'term_to_class': term_to_class, 'mapper': mapper, 'Viridis256': Viridis256, 'Greys256': Greys256}, code=code_callback_rbg)
         callback_class = CustomJS(args={'multi_select': multi_select, 'term_to_class': term_to_class, 'class_hex': class_hex}, code=code_callback_class)
         callback_ms = CustomJS(args={'source': source, 'term_to_source': term_to_source, 'checkbox': checkbox, 'slider2': slider2, 'slider1': slider1, 'p': p, 'mapper': mapper,
         'checkbox_class': checkbox_class, 'class_hex': class_hex, 'term_to_class': term_to_class}, code=code_callback_ms)
