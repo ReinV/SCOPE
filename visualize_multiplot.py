@@ -32,6 +32,7 @@ def import_table(file):
     lines = f.readlines()
 
     table = dict()
+    counter = 0
     for line in lines:
         line_to_list = line.split('\t')
         id = line_to_list[0]
@@ -44,10 +45,26 @@ def import_table(file):
         else:
             mass = float(mass_string)
         logP = float(line_to_list[5])
-
-        table[id] = {"Count": count, "TFIDF": tfidf, "Name": name, "Mass": mass, "logP": logP}
+        superterms = line_to_list[6]
+        table[id] = {"Count": count, "TFIDF": tfidf, "Name": name, "Mass": mass, "logP": logP, "Superterms": superterms}
 
     return table
+
+def read_file(file):
+    '''
+    This function reads a file and adds the information + id in a dictionary. This is added to another dictionary as value, and the term that describes the
+    information (e.g. "Names") as key.
+    '''
+    f = open(file, 'r')
+    lines = f.readlines()
+    id_to_name = dict()
+    for line in lines:
+        line_to_list = line.split('\t')
+        id = line_to_list[0]
+        name = line_to_list[1].strip()
+        id_to_name[id] = name
+
+    return id_to_name
 
 def create_array(table, normalization):
     '''
@@ -351,6 +368,39 @@ def merge_dataframes(df_normal, df_tfidf):
     df_normal['name3_tfidf'] = df_tfidf['name3']
     return df_normal
 
+def create_class_source(table, term, size, ratio, orientation, superterm):
+    id_to_name = read_file('files/ChEBI2Names.tsv')
+    x = []
+    y = []
+    counter = 0
+
+    for id in table.keys():
+        superterms = table[id]["Superterms"]
+        superterms = superterms.strip()
+        superterms = superterms.strip("[]")
+        superterms = superterms.split(',')
+        for class_id in superterms:
+            class_id = class_id.replace("\"", '')
+            class_id = class_id.replace("\'", '')
+            class_id = class_id.strip()
+            try:
+                name = id_to_name[class_id]
+            except:
+                print([class_id])
+
+            if name == superterm:
+                mass = table[id]["Mass"]
+                logP = table[id]["logP"]
+                x.extend([logP])
+                y.extend([mass])
+    x = np.asarray(x)
+    y = np.asarray(y)
+    q, r = cartesian_to_axial(x, y, size, orientation=orientation, aspect_scale=ratio)
+    df = pd.DataFrame(dict(r=r, q=q))
+    source = ColumnDataSource(df)
+
+    return source
+
 def create_data_source(table, term, size, ratio, orientation, BLUR_MAX, BLUR_STEP_SIZE):
     # create array
     x, y, ids = create_array(table, normalization=False)
@@ -593,15 +643,19 @@ def return_JS_code(widget):
             var p = p;
             var Viridis256 = Viridis256;
             var Greys256 = Greys256;
+            var class_hex = class_hex;
 
+            console.log(class_hex)
             if (active == 1){
             mapper.transform.palette = Greys256
             p.background_fill_color = '#000000'
+            class_hex.glyph.fill_color = 'red'
             }
 
             if (active == 0){
             mapper.transform.palette = Viridis256
             p.background_fill_color = '#440154'
+            class_hex.glyph.fill_color = 'pink'
             }
 
             """
@@ -676,6 +730,9 @@ def return_JS_code(widget):
             var p = p;
             var mapper = mapper;
             var metadata = metadata;
+            var class_hex = class_hex;
+            var checkbox_class = checkbox_class
+            var term_to_class = term_to_class;
 
             // select new_data
             var new_data = term_to_source[term]['source'].data
@@ -708,7 +765,30 @@ def return_JS_code(widget):
             // maximum value for fill color
             mapper.transform.high = Math.max.apply(Math, source_data['scaling'])
 
+            // class
+            if (term_to_class[term]['show_class']){
+                console.log(term_to_class[term]['show_class'])
+                class_hex.visible = false
+                class_hex.source = term_to_class[term]['source']
+                console.log(class_hex.source)
+                checkbox_class.active = []
+            }
             source.change.emit();
+            """
+    elif widget == 'class':
+        code = """
+            var term_to_class = term_to_class;
+            var multi_select = multi_select;
+            var class_hex = class_hex;
+            var active = cb_obj.active;
+            console.log(active.length)
+            if (active.length == 1) {
+                class_hex.visible = true
+            } else {
+                class_hex.visible = false
+            }
+
+
             """
     return code
 
@@ -732,8 +812,6 @@ def return_html(metadata):
     </HTML>
     """ % (metadata[0], metadata[0], metadata[1], metadata[2], metadata[3], metadata[4], metadata[5])
     return html_content
-
-
 
 def plot(tables, output_filename, xmin, xmax, ymin, ymax, superterm):
     '''
@@ -783,15 +861,29 @@ def plot(tables, output_filename, xmin, xmax, ymin, ymax, superterm):
 
     # source for widgets
     term_to_source = dict()
+    term_to_class = dict()
     term_to_metadata = dict()
     options = []
+
     for term in tables.keys():
         options.append((term, term))
         table = tables[term]['table']
+        if superterm:
+            source = create_class_source(table, term, size, ratio, orientation, superterm)
+            term_to_class[term] = {}
+            term_to_class[term]['show_class'] = True
+            term_to_class[term]['source'] = source
+        else:
+            term_to_class[term] = {'show_class': False}
         source, title = create_data_source(table, term, size, ratio, orientation, BLUR_MAX, BLUR_STEP_SIZE)
         metadata = return_html(tables[term]['metadata'])
         term_to_source[term] = {'source': source, 'title': title}
         term_to_metadata[term] = metadata
+
+    # hex = p.hex_tile(q='q', r="r", size=size, line_color=None, source=source, aspect_scale=ratio,orientation=orientation,
+    # fill_color='pink' )
+
+    # show(p)
 
     # make default souce for plot, this is the first source shown in the plot, and also works like a container. Old data is thrown out and new data is thrown in.
     default_term = list(tables.keys())[0] # pick the first one
@@ -807,7 +899,11 @@ def plot(tables, output_filename, xmin, xmax, ymin, ymax, superterm):
     # plot
     hex = p.hex_tile(q="q", r="r", size=size, line_color=None, source=source, aspect_scale=ratio, orientation=orientation,
            fill_color=mapper)
-
+    if superterm:
+        source_class = term_to_class[default_term]['source']
+        class_hex = p.hex_tile(q='q', r="r", size=size, line_color=None, source=source_class, aspect_scale=ratio,orientation=orientation,
+            fill_color='pink', fill_alpha=0.7)
+        class_hex.visible = False
     # HOVER
     TOOLTIPS = return_JS_code('tooltips')
     TOOLTIPS_tfidf = return_JS_code('tooltips_tfidf')
@@ -823,6 +919,9 @@ def plot(tables, output_filename, xmin, xmax, ymin, ymax, superterm):
     radio_button_group = RadioGroup(labels=["Viridis256", "Greys256"], active=0)
     button = Button(label="Metadata",button_type="default", width=100)
     multi_select = MultiSelect(title=output_filename, value=[default_term],options=options, width=100, height=300)
+    if superterm:
+        label = "Show "+str(superterm)
+        checkbox_class = CheckboxGroup(labels=[label], active=[])
 
     # WIDGETS CODE FOR CALLBACK
     code_callback_slider1 = return_JS_code('slider1')
@@ -831,14 +930,20 @@ def plot(tables, output_filename, xmin, xmax, ymin, ymax, superterm):
     code_callback_rbg = return_JS_code('rbg')
     code_callback_button = return_JS_code('button')
     code_callback_ms = return_JS_code('multi_select')
+    if superterm:
+        code_callback_class = return_JS_code('class')
 
     # WIDGETS CALLBACK
     callback_slider1 = CustomJS(args={'source': source, 'mapper': mapper, 'slider2': slider2, 'checkbox': checkbox}, code=code_callback_slider1)
     callback_slider2 = CustomJS(args={'source': source, 'mapper': mapper, 'slider1': slider1, 'checkbox': checkbox}, code=code_callback_slider2)
     callback_checkbox = CustomJS(args={'source': source, 'slider1': slider1, 'slider2': slider2, 'mapper': mapper, 'hover': hover, 'tooltips': TOOLTIPS, 'tooltips_tfidf': TOOLTIPS_tfidf}, code=code_callback_checkbox)
-    callback_radio_button_group = CustomJS(args={'p': p, 'mapper': mapper, 'Viridis256': Viridis256, 'Greys256': Greys256}, code=code_callback_rbg)
+    callback_radio_button_group = CustomJS(args={'p': p, 'class_hex': class_hex, 'mapper': mapper, 'Viridis256': Viridis256, 'Greys256': Greys256}, code=code_callback_rbg)
     callback_button = CustomJS(args={'term_to_metadata': term_to_metadata, 'multi_select': multi_select},code=code_callback_button)
-    callback_ms = CustomJS(args={'source': source, 'term_to_source': term_to_source, 'checkbox': checkbox, 'slider2': slider2, 'slider1': slider1, 'p': p, 'mapper': mapper}, code=code_callback_ms)
+    callback_ms = CustomJS(args={'source': source, 'term_to_source': term_to_source,  'term_to_class': term_to_class, 'checkbox': checkbox, 'slider2': slider2, 'slider1': slider1, 'p': p, 'mapper': mapper}, code=code_callback_ms)
+    if superterm:
+        callback_class = CustomJS(args={'multi_select': multi_select, 'term_to_class': term_to_class, 'class_hex': class_hex}, code=code_callback_class)
+        callback_ms = CustomJS(args={'source': source, 'term_to_source': term_to_source, 'checkbox': checkbox, 'slider2': slider2, 'slider1': slider1, 'p': p, 'mapper': mapper,
+        'checkbox_class': checkbox_class, 'class_hex': class_hex, 'term_to_class': term_to_class}, code=code_callback_ms)
 
     # WIDGETS INTERACTION
     slider1.js_on_change('value', callback_slider1)
@@ -847,11 +952,17 @@ def plot(tables, output_filename, xmin, xmax, ymin, ymax, superterm):
     radio_button_group.js_on_change('active', callback_radio_button_group)
     button.js_on_event(events.ButtonClick, callback_button)
     multi_select.js_on_change("value", callback_ms)
+    if superterm:
+        checkbox_class.js_on_change('active', callback_class)
 
     # LAYOUT
-    layout = row(multi_select, p, column(slider1, slider2, checkbox, radio_button_group, button))
+    if superterm:
+        layout = row(multi_select, p, column(slider1, slider2, checkbox, checkbox_class, radio_button_group, button))
+    else:
+        layout = row(multi_select, p, column(slider1, slider2, checkbox, radio_button_group, button))
 
     show(layout)
+
 
 def get_tables(files):
     '''
@@ -885,7 +996,7 @@ def parser():
     parser.add_argument('-xmin', required=False, metavar='xmin', dest='xmin', help='[xmin] to select x axis minimum (logP), default is -5')
     parser.add_argument('-xmax', required=False, metavar='xmax', dest='xmax', help='[xmax] to select x axis maximum (logP), default is 10')
     parser.add_argument('-ymax', required=False, metavar='ymax', dest='ymax', help='[ymax] to select y axix maximum (mass in Da), default is 1600')
-    parser.add_argument('-c', required=False, metavar='superterm', dest='superterm', help='[c] to select a class to be shown in the plot with a click on the class button')
+    parser.add_argument('-class', required=False, metavar='superterm', dest='superterm', help='[c] to select a class to be shown in the plot with a click on the class button')
     arguments = parser.parse_args()
     return arguments
 
@@ -894,24 +1005,31 @@ def main():
     args = parser()
     folder = args.input_folder
     output_filename = args.output_filename
-    xmin = float(args.xmin)
-    xmax = float(args.xmax)
-    ymax = float(args.ymax)
+    xmin = args.xmin
+    xmax = args.xmax
+    ymax = args.ymax
 
     # default settings
     if not xmin:
         xmin = -5
+    else:
+        xmin = float(args.xmin)
     if not xmax:
         xmax = 10
+    else:
+        xmax = float(args.xmax)
     if not ymax:
         ymax = 1600
+    else:
+        ymax = float(args.ymax)
     ymin = 0 # cannot be negative
 
     files = get_files(folder)
     tables = get_tables(files)
 
+    #
     plot(tables, output_filename, xmin, xmax, ymin, ymax, args.superterm)
-    print(datetime.now() - startTime)
+    # print(datetime.now() - startTime)
 
 if __name__ == '__main__':
     main()
