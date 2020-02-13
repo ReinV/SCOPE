@@ -131,8 +131,7 @@ def add_gaussian_blur(df, blur_max, step_size):
                     else:
                         # row should already be there, only need to add column value
                         coords_to_blur[(q_new, r_new)][column_name] = [counts_blur, tfidf_blur]
-                        # coords_to_blur[(q_new, r_new)][column_name] = [counts_blur, tfidf_blur]
-
+                        
 
     df_gaussian = pd.DataFrame()
 
