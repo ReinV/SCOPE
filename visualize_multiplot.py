@@ -898,17 +898,19 @@ def plot(tables, output_filename, xmin, xmax, ymin, ymax, superterm):
     # plot
     hex = p.hex_tile(q="q", r="r", size=size, line_color=None, source=source, aspect_scale=ratio, orientation=orientation,
            fill_color=mapper)
+
     if superterm:
         source_class = term_to_class[default_term]['source']
         class_hex = p.hex_tile(q='q', r="r", size=size, line_color=None, source=source_class, aspect_scale=ratio,orientation=orientation,
             fill_color='pink', fill_alpha=0.7)
         class_hex.visible = False
+
     # HOVER
     TOOLTIPS = return_JS_code('tooltips')
     TOOLTIPS_tfidf = return_JS_code('tooltips_tfidf')
     code_callback_hover = return_JS_code('hover')
     callback_hover = CustomJS(code=code_callback_hover)
-    hover = HoverTool(tooltips=TOOLTIPS, callback=callback_hover, show_arrow=False)
+    hover = HoverTool(renderers=[hex], tooltips=TOOLTIPS, callback=callback_hover, show_arrow=False)
     p.add_tools(hover)
 
     # WIDGETS
