@@ -501,7 +501,7 @@ def return_JS_code(widget):
             <table>
               <col width="100">
               <col width="80">
-              <col width="220">
+              <col width="305">
               <tr>
                 <th>Total Counts</th>
                 <th>@counts</th>
@@ -549,7 +549,7 @@ def return_JS_code(widget):
             <table>
               <col width="100">
               <col width="80">
-              <col width="220">
+              <col width="305">
               <tr>
                 <th>Total Counts</th>
                 <th>@tfidf</th>
