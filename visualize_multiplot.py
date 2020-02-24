@@ -44,7 +44,11 @@ def import_table(file):
             mass = 777
         else:
             mass = float(mass_string)
-        logP = float(line_to_list[5])
+        try:
+            logP = float(line_to_list[5])
+        except:
+            print(file)
+            print(line)
         superterms = line_to_list[6]
         table[id] = {"Count": count, "TFIDF": tfidf, "Name": name, "Mass": mass, "logP": logP, "Superterms": superterms}
 
@@ -583,12 +587,12 @@ def return_JS_code(widget):
         code = """
             var mapper = mapper
             var source_data = source.data;
-            var f = cb_obj.value
-            var sd_x =  Math.round(slider2.value)
-            var sd_x = String(sd_x)
-            var checkbox = checkbox
+            var f = cb_obj.value;
+            var sd_x =  Math.round(slider2.value);
+            var sd_x = String(sd_x);
+            var checkbox = checkbox;
 
-            if (checkbox.active.lenght == 1) {
+            if (checkbox.active.length == 1) {
 
             for (var i = 0; i < source_data[sd_x].length; i++) {
                 source_data['scaling'][i] = Math.pow(source_data[sd_x][i][1], 1/f)
@@ -611,7 +615,7 @@ def return_JS_code(widget):
         code = """
             var source_data = source.data;
             var sd_x =  cb_obj.value;
-            var sd_x = String(sd_x)
+            var sd_x = String(sd_x);
             var f = slider1.value;
             var checkbox = checkbox;
             var mapper = mapper;
@@ -1031,7 +1035,7 @@ def main():
 
     #
     plot(tables, output_filename, xmin, xmax, ymin, ymax, args.superterm)
-    # print(datetime.now() - startTime)
+    print(datetime.now() - startTime)
 
 if __name__ == '__main__':
     main()
