@@ -4,20 +4,24 @@ import networkx
 import obonet
 import csv
 import os.path
+import urllib
+import urllib.request
+import json
+import time
+import sys
+# from datetime import datetime
 
 def return_latest_ontology():
     '''
     This function imports the latest updated version of the ChEBI ontology, and returns the version number and ontology.
     '''
-    url = 'ftp://ftp.ebi.ac.uk/pub/databases/chebi/ontology/chebi.obo'
-    # file = open('files/chebi_180.obo', encoding = 'utf8')
-    graph = obonet.read_obo(url)
-    # file.close()
 
-    # Mapping from term ID to name
-    id_to_name = {id_: data.get('name') for id_, data in graph.nodes(data=True)}
+    print('Importing latest ontology...')
+    file = open('files/chebi.obo', encoding = 'utf8')
+    testfile.retrieve("http://randomsite.com/file.gz", "file.gz")
+    graph = obonet.read_obo(file)
     version = graph.graph['data-version']
-    return version, graph, id_to_name
+    return version, graph
 
 def return_current_version():
     '''
@@ -39,9 +43,11 @@ def show_updates(graph_new, graph_old):
     '''
     This function compares two ontologies and returnes the difference in nodes and edges (chemicals and relations).
     '''
-    difference_nodes = len(graph_new) - len(graph_old)
-    difference_edges = graph_new.number_of_edges() - graph_old.number_of_edges()
-    message = 'Newly updated ChEBI ontology contains %d new chemicals and %d new relations' % (difference_nodes, difference_edges)
+    total_nodes = len(graph_new)
+    total_edges = graph_new.number_of_edges()
+    difference_nodes = total_nodes - len(graph_old)
+    difference_edges = total_edges - graph_old.number_of_edges()
+    message = 'Latest ChEBI ontology contains %d new chemicals of %d total chemicals...\nand %d new relations of %d total relations' % (difference_nodes, total_nodes, difference_edges, total_edges)
     return message
 
 def get_mass(node, graph):
@@ -50,78 +56,60 @@ def get_mass(node, graph):
     '''
     mass = "-"
     try:
-        for value in graph.node[node]['property_value']:
-            if 'mass' in value and 'monoisotopicmass' not in value:
-                mass = value.split('\"')[1]
+        for string in graph.nodes[node]['property_value']:
+            if 'mass' in string and 'monoisotopicmass' not in string:
+                mass = string.split('\"')[1] # wat te doen met een 0 ?
     except:
         pass
     return mass
 
-def get_smiles(node, graph):
+def get_smile(node, graph):
     '''
     This function retrieves Smiles from the ontology.
     '''
     smile = ''
     try:
-        for value in graph.node[node]['property_value']:
+        for value in graph.nodes[node]['property_value']:
             if 'smile' in value:
                 smile = value.split('\"')[1]
     except:
         pass
     return smile
 
-def get_relations(nodes, graph, has_role):
+def get_relations(nodes, graph):
     '''
-    This function recieves a list of ids for which parents with 'is a' and 'has role' relationships types need to be returned.
-    It returns all ChEBI IDs of those parents in a dictionary with the child ChEBI ID as key.
+    This function recieves a node in the graph, and for that node, it retrieves every parent with 'is_a' relationships.
+    It returns a dictionary with those parents.
     '''
     parent_to_key = dict()
 
-    if has_role:
-        for node in nodes:
-            for child, parent, key in graph.out_edges(node, keys=True):
-                if key == 'is_a' or key == 'has_role':
-                    try:
-                        parent_to_key[parent]
-                    except:
-                        parent_to_key[parent] = key
-    else:
-        for node in nodes:
-            for child, parent, key in graph.out_edges(node, keys=True):
-                if key == 'is_a':
-                    try:
-                        parent_to_key[parent]
-                    except:
-                        parent_to_key[parent] = key
+    for node in nodes:
+        for child, parent, key in graph.out_edges(node, keys=True):
+            if key == 'is_a':
+                try:
+                    parent_to_key[parent]
+                except:
+                    parent_to_key[parent] = key
 
     return parent_to_key
 
-def get_superterms(id, graph, has_role):
+def get_superterms(id, graph):
     '''
-    This function recieves an id of which all superterms of a certain relationships type needs to be returned.
-    The function searches for 'is a' relationships (and 'has role' if has_role = True) until all possible relationships with other ChEBI IDs are found.
-    It returns a list of these ChEBI IDs.
+    This function recieves a ChEBI ID and the latest ChEBI ontology.
+    It returns a list of parent ChEBI ids with 'is_a' relationship, up to the root.
     '''
     list_relations = []
     nodes = [id]
     end = False
 
     while end == False:
-        # get the 'is a' and 'has role' (if has_role == True) relationships for the list of ids
-        parent_to_key = get_relations(nodes, graph, has_role)
-
-        #if there are no 'is a' (or 'has role') relationships, end the search
-        if len(parent_to_key) == 0:
+        parent_to_key = get_relations(nodes, graph) # get the 'is a' relationships
+        if len(parent_to_key) == 0: #if there are no 'is a' relationships, end the search
             end = True
         else:
-            # clear the list for a new search for relationships
             nodes = []
-
             for parent in parent_to_key.keys():
-                # add the parents to the list for a new search for relationships
                 nodes.append(parent)
-
-                # add parents to list of relationships
                 new_id = parent.split(":")[1]
                 list_relations.append(new_id)
 
@@ -134,6 +122,170 @@ def update_version_number(number):
     file = open('files/ontology_version.txt', 'w')
     file.write(number)
     return
+
+def get_new_names(graph, file):
+    '''
+    This function recieves the latest ChEBI ontolog, and the file containing the ChEBI names.
+    It returns a dictionary with names of new molecules not yet stored in the file.
+    '''
+    id_to_info = read_file(file)
+    id_to_name = dict()
+    for key, data in graph.nodes(data=True):
+        id = key.split(":")[1]
+        try:
+            id_to_info[id]
+        except:
+            name = data.get('name')
+            id_to_name[id] = name
+    return id_to_name
+
+def get_new_smiles(graph, file):
+    '''
+    This function recieves the latest ChEBI ontology, and the file containing the smiles.
+    It returns a dictionary with smiles of new molecules not yet stored in the file.
+    '''
+    id_to_info= read_file(file)
+    id_to_smile = dict()
+
+    for key in graph.nodes():
+        id = key.split(":")[1]
+        try:
+            id_to_info[id]
+        except:
+            smile = get_smile(key, graph)
+            if smile != '':
+                id_to_smile[id] = smile
+    return id_to_smile
+
+def perform_task(string_of_smiles, SLEEP_TIME, TIMEOUT):
+    MODEL_ID = 4 # AlogPS3.0 model id
+    url = 'https://ochem.eu/modelservice/postModel.do?'
+    values = {'modelId': MODEL_ID, 'mol': string_of_smiles}
+
+    # Start task
+    connection = False
+    while connection == False:
+        try:
+            data = urllib.parse.urlencode(values)
+            data = data.encode('ascii')
+            response = urllib.request.urlopen(url, data, timeout=TIMEOUT)
+            json_data = json.loads(response.read())
+            print(json_data)
+            if json_data["taskId"] == 0:
+                connection = False
+                print('task failed, trying again in %d seconds' % SLEEP_TIME)
+                time.sleep(SLEEP_TIME)
+            else:
+                connection = True
+        except:
+            print('connection failed, trying again in %d seconds' % SLEEP_TIME)
+            time.sleep(SLEEP_TIME) # in seconds
+
+    return json_data["taskId"]
+
+def download_results(task_id, SLEEP_TIME, TIMEOUT):
+    status = 'pending'
+    request_url = 'http://ochem.eu/modelservice/fetchModel.do?taskId='+str(task_id)
+
+    while status == 'pending':
+        connection = False
+        try:
+            response = urllib.request.urlopen(request_url, timeout=TIMEOUT)
+            task_output = json.loads(response.read())
+            id = task_output['taskId']
+            connection = True
+            status = task_output['status']
+        except:
+            if connection == True and id == 0:
+                status = 'success'
+            else:
+                print('Task pending, request repeated in %d seconds' % SLEEP_TIME)
+                time.sleep(SLEEP_TIME)
+        if connection == True:
+            if status == 'error':
+                if len(task_output['predictions'][0]) == 0:
+                    sys.exit('Model predictions failed, script stopped')
+            elif status == 'pending':
+                print('Model predictions are still pending: request repeated in %d seconds ...' % SLEEP_TIME)
+                time.sleep(SLEEP_TIME)
+
+        # if connection == True:
+        #     if status == 'error':
+        #         print(status)
+        #         sys.exit('Model predictions failed, script stopped')
+        #     if status == 'pending':
+        #         print('Model predictions are still pending: request repeated in %d seconds ...' % SLEEP_TIME)
+        #         time.sleep(SLEEP_TIME)
+
+    return task_output
+
+def get_succesful_predictions(output):
+    predictions = []
+    for pred in output['predictions']:
+        if pred != None:
+            predictions.append(pred)
+    return predictions
+
+def store_predictions(predictions, id_to_logS, id_to_logP, id_to_smile, counter, exceptions):
+    for output_list in predictions:
+        try:
+            predictions = output_list['predictions']
+            logP = predictions[0]['value']
+            logS = predictions[1]['value']
+        except:
+            exceptions += 1
+            logP = '-'
+            logS = '-'
+        id = list(id_to_smile.keys())[counter]
+        id_to_logP[id] = logP
+        id_to_logS[id] = logS
+        counter += 1
+    return id_to_logS, id_to_logP, counter, exceptions
+
+def get_new_predictions(id_to_smile):
+    '''
+    This function recieves a dictionary with new smiles. It returns two dictionaries with predicted logP and logS values using the smiles.
+    Smiles are put in a string, and added to the url. A task is created which is applying the model AlogPS3.0.
+    After the model is done, the output is downloaded using the task_id.
+    '''
+    # print('Getting new predictions from OCHEM...')
+
+    TIMEOUT = 100
+    SLEEP_TIME = 10
+    BATCH_LENGTH = 200
+
+    counter = 0
+    exceptions = 0
+    id_to_logP = dict()
+    id_to_logS = dict()
+
+    print(len(id_to_smile))
+
+    for i in range(0, len(id_to_smile), BATCH_LENGTH):
+    # for i in range(5600, 5600+BATCH_LENGTH, BATCH_LENGTH):
+        print('Getting predictions %d to %d' % (i, i+BATCH_LENGTH))
+        difference = BATCH_LENGTH
+        end = i + BATCH_LENGTH
+        while difference > 0 and counter < len(id_to_smile):
+            # get smiles
+            string_of_smiles = ''
+            smiles = list(id_to_smile.values())[i:end]
+            for smile in smiles:
+                string_of_smiles += str(smile) + '$$$$'
+            # perform_task
+            task_id = perform_task(string_of_smiles, SLEEP_TIME, TIMEOUT)
+            task_results = download_results(task_id, SLEEP_TIME, TIMEOUT)
+            predictions = get_succesful_predictions(task_results)
+            id_to_logS, id_to_logP, counter, exceptions = store_predictions(predictions, id_to_logS, id_to_logP, id_to_smile, counter, exceptions)
+
+            difference = difference - len(predictions)
+            if difference != 0:
+                i = i + len(predictions)
+            print(len(predictions), i, difference, counter)
+        time.sleep(SLEEP_TIME)
+    print('Got prediction errors for %d of %d predictions in total' % (exceptions, counter))
+
+    return id_to_logP, id_to_logS
 
 def read_file(file):
     '''
@@ -149,86 +301,114 @@ def read_file(file):
         for line in lines:
             line_to_list = line.split('\t')
             id = line_to_list[0]
-            info = line_to_list[1].strip()
+            info = line_to_list[1].strip() # nodig?
             id_to_info[id] = info
     else:
         f = open(file, 'w') # make file
 
     return id_to_info
 
-def update_smile(file, graph):
+def rewrite_file(graph, file):
     '''
-    This function writes old and new id's with their smile to a .tsv file, and the new smiles will be written to a seperate text file.
-    The new id's will be written to the file after the old id's, so that the order is similar to the new smiles text file.
+    This function recieves the latest ChEBI ontology, and the file that will be overwritten.
+    Depending on the file argument, it will get the corresponding information (mass, superterms), and writes this to the file.
     '''
 
-    id_to_smile = read_file(file)
-    new_smiles = dict()
-    for key in graph.nodes():
-        id = key.split(":")[1]
-        try:
-            id_to_smile[id]
-        except:
-            new_smiles[id] = get_smiles(key, graph)
-
-    with open(file, 'w', newline='', encoding="utf-8") as tsvfile: # first write old smiles to smiles file, and the new smiles to the smiles file
-        writer = csv.writer(tsvfile, delimiter = '\t')
-        for id in id_to_smile.keys():
-            smile = id_to_smile[id]
-            if smile != '': # make sure no empty smiles are in the file
-                writer.writerow([id, smile])
-        for id in new_smiles.keys():
-            smile = new_smiles[id]
-            if smile != '': # make sure no empty smiles are in the file
-                writer.writerow([id, smile])
-    tsvfile.close()
-
-    f = open('files/new_smiles.txt', 'w') # then add the new smiles to a text file (in the same order)
-    for id in new_smiles.keys():
-        smile = new_smiles[id]
-        if smile != '': # no empty smiles in the file
-            f.write(smile+'\n')
-    f.close()
-
-def update_file(file, graph, id_to_name):
-    '''
-    This function recieves the file path, the corresponding file content in a dictionary, and the latest ontology.
-    The keys in the latest ontology are CHEBI IDs. Every CHEBI ID is tested in the dictionary to determine if its present in the file.
-    If it's not present, the CHEBI ID and its information (smile, name, or superterms) is added to the file.
-    '''
     with open(file, 'w', newline='', encoding="utf-8") as tsvfile:
         writer = csv.writer(tsvfile, delimiter = '\t')
         for key in graph.nodes():
             id = key.split(":")[1]
-            if file == 'files/ChEBI2Names.tsv':
-                info = id_to_name[key]
-            elif file == 'files/ChEBI2Superterms.tsv':
-                info = get_superterms(key, graph, has_role=False)
-            elif file == 'files/ChEBI2Superterms_roles.tsv':
-                info = get_superterms(key, graph, has_role=True)
-            elif file == 'files/ChEBI2Mass.tsv':
+            if file == 'files/ChEBI2Mass.tsv':
                 info = get_mass(key, graph)
+            elif file == 'files/ChEBI2Class.tsv':
+                info = get_superterms(key, graph)
             writer.writerow([id, info])
+    print('%s updated' % file)
+
+    return
+
+def update_file(id_to_info, file):
+    '''
+    This function recieves a dictionary and a file.
+    Information in the dictionary will be added to that file.
+    '''
+    with open(file, 'a', newline='', encoding="utf-8") as tsvfile:
+        writer = csv.writer(tsvfile, delimiter = '\t')
+        for id in id_to_info:
+            info = id_to_info[id]
+            writer.writerow([id, info])
+    print('%s updated' % file)
+    return
+
+def check_latest_ontology_version():
+    url = 'ftp://ftp.ebi.ac.uk/pub/databases/chebi/archive/'
+    response = urllib.request.urlopen(url)
+    archive = response.read()
+    version = archive.split()[-1].decode('UTF-8').split('rel')[1]
+    print("Latest ontology version: %s" % version)
+    return version
+
 
 def main():
-    files = ['files/ChEBI2Names.tsv','files/ChEBI2Smiles.tsv', 'files/ChEBI2Superterms.tsv', 'files/ChEBI2Superterms_roles.tsv', 'files/ChEBI2Mass.tsv']
+    # check for latest version
+    latest_version = check_latest_ontology_version()
+
+    # ontology path and url
+    ontology_path = 'files/chebi.obo'
+    url = 'ftp://ftp.ebi.ac.uk/pub/databases/chebi/ontology/chebi.obo'
+
+    # check for obo file
+    try:
+        file = open(ontology_path, encoding = 'utf8')
+        print('Importing ChEBI ontology')
+        graph = obonet.read_obo(file)
+        version = graph.graph['data-version']
+
+        # if obo file not in files folder or not up to date, download new one
+        if version != latest_version:
+            print("Downloading latest ontology")
+            url = 'ftp://ftp.ebi.ac.uk/pub/databases/chebi/ontology/chebi.obo'
+            urllib.request.urlretrieve(url, ontology_path)
+            file = open(ontology_path, encoding = 'utf8')
+            graph = obonet.read_obo(file)
+            version = graph.graph['data-version']
+    except:
+        print('No chebi.obo file in the files folder, downloading and saving most recent ontology file...')
+        urllib.request.urlretrieve(url, ontology_path)
+        file = open(ontology_path, encoding = 'utf8')
+        graph = obonet.read_obo(file)
+        version = graph.graph['data-version']
+
+    # check if (downloaded) ontology version is correct
+    if version != latest_version:
+        print('Something went wrong')
+
     current_version = return_current_version()
-    latest_version, graph, id_to_name = return_latest_ontology() # graph = ontology
+
+    print('ChEBI version used to update files: %s' % current_version)
+    print('ChEBI latest version: %s' % latest_version)
 
     if current_version == latest_version:
-        print('files are up-to-date')
+        print('Files are up-to-date')
     else:
-        print('files need updating')
+        print('Files need updating ...')
         graph_old = return_archived_ontology(current_version)
         updates = show_updates(graph, graph_old)
+        # clear memory
+        graph_old = []
         print(updates)
 
-        for file in files:
-            if file == 'files/ChEBI2Smiles.tsv':
-                update_smile(file, graph)
-            else:
-                update_file(file, graph, id_to_name)
-            print('%s updated' % file)
+        id_to_name = get_new_names(graph, file='files/ChEBI2Names.tsv')
+        id_to_smile = get_new_smiles(graph, file='files/ChEBI2Smiles.tsv')
+        id_to_logP, id_to_logS = get_new_predictions(id_to_smile)
+
+        update_file(id_to_name, file='files/ChEBI2Names.tsv')
+        update_file(id_to_smile, file='files/ChEBI2Smiles.tsv')
+        update_file(id_to_logP, file='files/ChEBI2logP.tsv')
+        update_file(id_to_logS, file='files/ChEBI2logS.tsv')
+
+        rewrite_file(graph, 'files/ChEBI2Mass.tsv')
+        rewrite_file(graph, 'files/ChEBI2Class.tsv')
 
         update_version_number(latest_version)
 

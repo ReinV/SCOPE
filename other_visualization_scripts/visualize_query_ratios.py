@@ -13,6 +13,9 @@ from bokeh.transform import linear_cmap
 from bokeh.transform import log_cmap
 from bokeh.util.hex import hexbin
 from bokeh.util.hex import cartesian_to_axial
+from bokeh.palettes import Reds9
+from bokeh.models import LinearColorMapper, BasicTicker, ColorBar
+from bokeh.layouts import column, row
 
 def hex_to_bin(x, y, size, aspect_scale, orientation="pointytop"):
     # pd = import_required('pandas','hexbin requires pandas to be installed')
@@ -22,26 +25,29 @@ def hex_to_bin(x, y, size, aspect_scale, orientation="pointytop"):
     return df
 
 def import_table(file):
-    f = open(file, 'r')
-    lines = f.readlines()
-
-    table = dict()
-    for line in lines:
-        line_to_list = line.split('\t')
-        id = line_to_list[0]
-        count = int(line_to_list[1])
-        tfidf = int(line_to_list[2])
-        name = line_to_list[3]
-        mass = float(line_to_list[4])
-        logP = float(line_to_list[5])
-        superterms = line_to_list[6]
-        superterms = superterms.strip()
-        superterms = superterms.strip("\"")
-        superterms = superterms.strip('[]')
-        superterms = superterms.replace('\'','')
-        superterms = superterms.split(', ')
-
-        table[id] = {"Count": count,"tfidf": tfidf, "Name": name, "Mass": mass, "logP": logP, "Superterms": superterms}
+    print('test')
+    table = pd.read_pickle(file, compression=None)
+    print(table)
+    # f = open(file, 'r')
+    # lines = f.readlines()
+    #
+    # table = dict()
+    # for line in lines:
+    #     line_to_list = line.split('\t')
+    #     id = line_to_list[0]
+    #     count = int(line_to_list[1])
+    #     tfidf = int(line_to_list[2])
+    #     name = line_to_list[3]
+    #     mass = float(line_to_list[4])
+    #     logP = float(line_to_list[5])
+    #     superterms = line_to_list[6]
+    #     superterms = superterms.strip()
+    #     superterms = superterms.strip("\"")
+    #     superterms = superterms.strip('[]')
+    #     superterms = superterms.replace('\'','')
+    #     superterms = superterms.split(', ')
+    #
+    #     table[id] = {"Count": count,"tfidf": tfidf, "Name": name, "Mass": mass, "logP": logP, "Superterms": superterms}
 
     return table
 
@@ -82,80 +88,46 @@ def transform_df(df):
     return df
 
 def calculate_ratios(df, dfs, lb):
+    df_merged = pd.merge(df, dfs, how='outer', on=['q', 'r'])
+    df_merged.loc[:,['counts_x', 'counts_y']] = df_merged.loc[:,['counts_x', 'counts_y']].fillna(lb)
+    df_merged.loc[:,['counts_x']] = [lb if counts < lb else counts for counts in df_merged.counts_x]
+    df_merged.loc[:,['counts_y']] = [lb if counts < lb else counts for counts in df_merged.counts_y]
+    df_merged.loc[:,['counts_x']] = df_merged.counts_x / df_merged.counts_x.sum()
+    df_merged.loc[:,['counts_y']] = df_merged.counts_y / df_merged.counts_y.sum()
+    df_merged.loc[:,'ratio'] = df_merged.counts_x / df_merged.counts_y
+    df_merged.loc[:,'log_ratio'] = np.log(df_merged.ratio)
 
-    df_ratio_low = pd.DataFrame()
-    df_ratio_high = pd.DataFrame()
+    minimum = min(df_merged.log_ratio)
+    maximum = max(df_merged.log_ratio)
 
-    q_start = min(min(df['q']),min(dfs['q']))
-    q_end = max(max(df['q']),max(dfs['q']))
-    r_start = min(min(df['r']),min(dfs['r']))
-    r_end = max(max(df['r']),max(dfs['r']))
+    df_ratio_low = df_merged[df_merged.log_ratio < 0]
+    df_ratio_high = df_merged[df_merged.log_ratio >= 0]
 
-    q_list_low = []
-    r_list_low = []
-    ratio_list_low = []
+    print(minimum, maximum)
 
-    q_list_high = []
-    r_list_high = []
-    ratio_list_high = []
 
-    for q in range(q_start, q_end+1):
-        for r in range(r_start, r_end+1):
-            try:
-                count = df[(df.q==q) & (df.r==r)]['counts'].iloc[0] # check if count exists for these coordinates
-                name = df[(df.q==q) & (df.r==r)]['names'].iloc[0]
-            except:
-                count = 0
-                name = ""
-            try:
-                count_s = dfs[(dfs.q==q) & (dfs.r==r)]['counts'].iloc[0]
-                name_s = df[(df.q==q) & (df.r==r)]['names'].iloc[0]
-            except:
-                count_s = 0
-                name_s = ""
-
-            if count == 0 and count_s == 0:
-                pass
-            else:
-                if count < lb:
-                    count = lb
-                if count_s < lb:
-                    count_s = lb
-
-                ratio = count / count_s
-                if ratio < 1:
-                    ratio_list_low.append(ratio)
-                    q_list_low.append(q)
-                    r_list_low.append(r)
-                else:
-                    ratio_list_high.append(ratio)
-                    q_list_high.append(q)
-                    r_list_high.append(r)
-
-    df_ratio_low['q'] = q_list_low
-    df_ratio_low['r'] = r_list_low
-    df_ratio_low['ratio'] = ratio_list_low
-
-    df_ratio_high['q'] = q_list_high
-    df_ratio_high['r'] = r_list_high
-    df_ratio_high['ratio'] = ratio_list_high
-
-    return df_ratio
+    return df_ratio_low, df_ratio_high, minimum, maximum
 
 def normalize_df(df):
     total_count = df['counts'].sum()
     df['counts'] = df['counts'] / total_count
     return df
 
-def plot_ratio(x, y, names, xs, ys, names_s, lb):
+def plot_ratio(x, y, names, xs, ys, names_s, lb, query_1, query_2):
 
-    ratio = (max(y)-min(y)) / (max(x)-min(x))
-    size = 20
-    # (max(y)-min(y)) / (max(x)-min(x))
+    title = "Hexbin plot comparing %s with %s" % (query_1, query_2)
+
+    max_x = max(np.append(x, xs))
+    min_x = min(np.append(x, xs))
+    max_y = max(np.append(y, ys))
+    min_y = min(np.append(y, ys))
+
+    size = 10
+    ratio = (max_y - min_y) / (max_x - min_x)
 
     # print(ratio)
-    p = figure(title="Hexbin for 500 points", match_aspect=True, aspect_scale = ratio, x_range = [min(x), max(x)],y_range=[min(y),max(y)],
-               tools="wheel_zoom,reset", background_fill_color= '#D3D3D3')
+    p = figure(title=title, match_aspect=True, aspect_scale = ratio, x_range = [min_x, max_x],y_range=[min_y, max_y],
+               tools="wheel_zoom,reset, save", background_fill_color= '#D3D3D3')
     p.grid.visible = False
 
     alpha = 0.8
@@ -176,24 +148,51 @@ def plot_ratio(x, y, names, xs, ys, names_s, lb):
     df2 = transform_df(df2)
 
     # normalize counts against total counts
-    df1_normalized = normalize_df(df1)
-    df2_normalized = normalize_df(df2)
+    # df1_normalized = normalize_df(df1)
+    # df2_normalized = normalize_df(df2)
 
     # calculate ratio's
-    df_ratio_low, df_ratio_high = calculate_ratios(df1_normalized, df2_normalized, lb)
+    df_ratio_low, df_ratio_high, minimum, maximum = calculate_ratios(df1, df2, lb)
+    extreme = max(abs(minimum), maximum)
+    Reds9.reverse()
 
     p.hex_tile(q="q", r="r", size=size, line_color=None, source=df_ratio_low,aspect_scale=ratio,
-               fill_color=linear_cmap('ratio', 'Blues9', 0,1))
+               fill_color=linear_cmap('log_ratio', 'Blues9', -extreme, 0))
 
     p.hex_tile(q="q", r="r", size=size, line_color=None, source=df_ratio_high,aspect_scale=ratio,
-               fill_color=linear_cmap('ratio', 'Blues9', 1, max(df_ratio_high.ratio)))
+               fill_color=linear_cmap('log_ratio', Reds9, 0, extreme))
 
-    hover = HoverTool(tooltips=[("ratio", "@ratio")])
+    hover = HoverTool(tooltips=[("log_ratio", "@log_ratio")])
     p.add_tools(hover)
     #
+
+    from bokeh.palettes import Blues7 as blue
+    from bokeh.palettes import Reds7 as red
+
+    red.reverse()
+    pbr = blue + ['#FFFFFF'] + Reds9
+
+    # color bar
+    color_mapper = LinearColorMapper(palette=pbr, low=-5, high=5)
+
+    color_bar = ColorBar(color_mapper=color_mapper, ticker=BasicTicker(),major_label_overrides={4: 'More '+str(query_1)+' counts',-4:"More "+str(query_2)+" counts"},major_label_text_align='left',
+                         label_standoff=6, border_line_color=None, location=(0,0))
+
+    # color bar is added to a dummy figure, to prevent the shrinking of the original plot
+    dummy = figure(
+               toolbar_location=None,
+               min_border=0,
+               outline_line_color=None)
+    dummy.add_layout(color_bar, 'left')
+    dummy.title.align = 'center'
+    dummy.title.text_font_size = '10pt'
+
     output_file("plots/compare_ratios.html")
 
-    show(p)
+    layout = row(p, dummy)
+
+    show(layout)
+
 
 def parser():
     parser = argparse.ArgumentParser(description='This script makes a table of the query IDs, their names and their properties')
@@ -204,15 +203,20 @@ def parser():
 
 def main():
     args = parser()
+    print('wtf')
     file_1 = args.input_file
     file_2 = args.input_file_2
     table_1 = import_table(file_1) # , term ?
     table_2 = import_table(file_2)
-
-    lower_bound = 50 # below this number ...
-    x, y, names = create_array(table_1)
-    xs, ys, names_s = create_array(table_2)
-    plot_ratio(x, y, names, xs, ys, names_s, lower_bound)
+    #
+    # LOWER_BOUND = 10 # below this number ...
+    # x, y, names = create_array(table_1)
+    # xs, ys, names_s = create_array(table_2)
+    #
+    # query_1 = file_1.split('\\')[1].split('_')[0]
+    # query_2 = file_2.split('\\')[1].split('_')[0]
+    #
+    # plot_ratio(x, y, names, xs, ys, names_s, LOWER_BOUND, query_1, query_2)
 
 if __name__ == '__main__':
     main()

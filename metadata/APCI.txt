@@ -1,6 +1,6 @@
 metadata for APCI
 query: (Metabolomics OR metabonomics) AND (METHODS:"APCI" OR METHODS:"Atmospheric-pressure chemical ionization")
-search date: 2019-11-21
-number of papers: 195
-number of chemicals: 29810 
-number of unique chemicals: 2900 (note: not all chemicals can be plotted due to missing logP values)
+search date: 2020-01-28
+number of papers: 201
+number of chemicals: 32278
+number of unique chemicals: 3012 (note: not all chemicals can be plotted due to missing logP values)
