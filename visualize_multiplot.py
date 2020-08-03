@@ -354,7 +354,7 @@ def return_JS_code(widget):
             console.log(new_data)
 
             // replace current data
-            for (key in new_data) {
+            for (var key in new_data) {
                 source_data[key] = [];
                 for (i=0;i<new_data[key].length;i++) {
                     source_data[key].push(new_data[key][i]);
@@ -586,10 +586,10 @@ def return_JS_code(widget):
             var new_data = term_to_source[term]['source'].data
 
             // replace current data
-            for (key in new_data) {
-                source_data[key] = [];
-                for (i=0;i<new_data[key].length;i++) {
-                    source_data[key].push(new_data[key][i]);
+            for (var column in new_data) {
+                source_data[column] = [];
+                for (i=0;i<new_data[column].length;i++) {
+                    source_data[column].push(new_data[column][i]);
                 }
             }
 
