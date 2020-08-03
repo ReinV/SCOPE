@@ -106,7 +106,7 @@ def main():
     else:
         sys.exit('Error: please give \'file\' or \'folder\' as input type')
 
-    get searches_by_year and statistics
+    # # get searches_by_year and statistics
     print('getting searches by year ...')
     df_sby = read_searches_by_year()
     chebi_to_npubs, N = get_statistics(df_sby)
