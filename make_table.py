@@ -106,14 +106,14 @@ def main():
     else:
         sys.exit('Error: please give \'file\' or \'folder\' as input type')
 
-    # get searches_by_year and statistics
+    get searches_by_year and statistics
     print('getting searches by year ...')
     df_sby = read_searches_by_year()
     chebi_to_npubs, N = get_statistics(df_sby)
 
     for result in results:
         print(result)
-        term = result.split('\\')[1].split('_')[0]
+        term = result.split('\\')[1].split('_ChEBI_IDs.tsv')[0]
         print('making table for %s' % term)
 
         # import results
