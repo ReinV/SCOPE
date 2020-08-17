@@ -9,11 +9,17 @@ from os import listdir
 
 def read_searches_by_year():
     '''
-    This function reads the latest decade of searches_by_year, and returns a dataframe with ChEBI and Publication identifiers.
+    This function reads the summarized searches by decade files in the searches_by_year folder,
+    and returns a dataframe with ChEBI and Publication identifiers.
     '''
-    # path = 'searches_by_year/1990-1999_ChEBI_IDs.tsv'
-    path = 'searches_by_year/2010-2019_ChEBI_IDs.tsv'
-    df = pd.read_csv(path, sep='\t', dtype={"ChEBI": "str", "Publication": "str"})
+    folder = 'searches_by_year/'
+    files = [file for file in listdir(folder) if '.tsv' in file]
+    df = pd.DataFrame(columns=["ChEBI", "Publication"])
+    for file in files:
+        path = folder+file
+        df_new = pd.read_csv(path, sep='\t', dtype={"ChEBI": "str", "Publication": "str"})
+        df = pd.concat([df, df_new])
+    print(df)
     return df
 
 def get_statistics(df):
@@ -29,7 +35,8 @@ def get_statistics(df):
 
 def normalize(id, count, N, id_to_npubs):
     '''
-    This function performs the tfidf normalization ( see https://en.wikipedia.org/wiki/Tf%E2%80%93idf )
+    This function performs the tfidf normalization based on the number of publications a ChEBI identifers can be found in
+    ( see https://en.wikipedia.org/wiki/Tf%E2%80%93idf ).
     '''
     try:
         npubs = id_to_npubs['Count'][id]
@@ -37,8 +44,6 @@ def normalize(id, count, N, id_to_npubs):
         npubs = 0
     idf = math.log(N/(1+npubs))
     tfidf = idf * count
-    # if id == '15377':
-    #     print(id, count, N, npubs, idf, tfidf, tfidf )
     return math.floor(tfidf)
 
 def import_properties():
@@ -57,6 +62,13 @@ def import_properties():
     return data
 
 def get_info(data, key, id):
+    '''
+    This function recieves:
+        - a ChEBI identifier
+        - a dictionary key indicating the type of information
+        - data dictionary containing information of every ChEBI identifier
+    The function returns specific information retrieved from the data dictionary (e.g. Name or Mass)
+    '''
     try:
         info = data[key]['Info'][id]
     except:
@@ -72,16 +84,17 @@ def make_table(data, df_results):
     table = df_results
     # create column lists
     for key in data.keys():
-        # print(data[key])
         column_list = [get_info(data, key, id) for id in df_results.index.to_list()]
         table.loc[:,key] = column_list
     table = table.replace({'Mass': {"-": np.nan}, 'logP': {"-": np.nan}})
     table = table.dropna()
+    table = table.sort_values(by='Count', ascending=False)
     return table
 
 def write_to_file(table, term):
     '''
-    This function writes the table in a .tsv file and names this file after the (shortest) query search term.
+    This function writes the table in a .pkl file for easy importation into the visualization script,
+    and a .tsv for own inspection. The file is named with the (shortest) query search term.
     '''
     path = 'tables/'+term
     table.to_csv(path+'_table.tsv', sep='\t')
@@ -112,7 +125,6 @@ def main():
     chebi_to_npubs, N = get_statistics(df_sby)
 
     for result in results:
-        print(result)
         term = result.split('\\')[1].split('_ChEBI_IDs.tsv')[0]
         print('making table for %s' % term)
 
