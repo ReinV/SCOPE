@@ -5,7 +5,7 @@ This toolbox contains python scripts that follow the [EuropePMC2ChEBI KNIME work
 ![Workflow scheme](workflow_scheme_new_adjusted.png)
 
 # Using external sources to get plot properties
-In the 'files' folder, files can be found with ChEBI identifiers linked to a certain property. These do not come from the search itself but can be looked up in the ChEBI Ontology. Additionally, logP and logS values are predicted using the AlogPS3.0 model from the OCHEM website [ochem.eu site](https://ochem.eu). By executing update_chebis.py, all these properties are gathered and stored in sperate files in the 'files' folder.
+In the 'files' folder, files can be found with ChEBI identifiers linked to a certain property. These do not come from the search itself but can be looked up in the ChEBI Ontology. Additionally, log *P* and log *S* values are predicted using the AlogPS3.0 model from the OCHEM website [ochem.eu site](https://ochem.eu). By executing update_chebis.py, all these properties are gathered and stored in sperate files in the 'files' folder.
 
 
 # What's in the Toolbox
@@ -22,8 +22,8 @@ In the 'files' folder, files can be found with ChEBI identifiers linked to a cer
 
 - The 'tables' folder contains files for every query search, in which tables are created with the ChEBI identifier, the amount of hits in the search, names, and other properties.
 
-- The 'plots' folder contains the html files of the interactive plots. Mass is shown on the y-axis and logP is shown on the x-axis.
- The color intensity is log scaled.
+- The 'plots' folder contains the html files of the interactive plots. By default, mass is shown on the y-axis and log *P* on the x-axis.
+ The color intensity is scaled by the *n*th root, where *n* can be adjusted using the saturation slider in the interactive visualization.
  
  - The 'searches_by_year' folder should contain results of all annotated publications per year (or decade). This data is used to perform TFIDF normalization, but can also be used to study research trends without having to repeat the searches. The necessary files are avaiable on the OSF companion project [here](https://osf.io/pvwu2/). Not all years need to be present - SCOPE will read all files in the folder and use these for normalization.
  
@@ -37,12 +37,12 @@ This script takes query searches in a text file from the 'queries' folder as inp
 This scripts takes the results from the 'results' folder as input, as well as the ChEBI files in the 'files' folder, and makes a table for every chemical containing its ID, count, mass, etc. This table is stored as a .tsv file in the 'tables' folder. Additionally, counts from the chemicals are normalized with [term frequency inversed document frequency](https://en.wikipedia.org/wiki/Tf%E2%80%93idf), using the data in the 'searches_by_year' folder.
 
 ### visualize_query.py
-This script takes a table from the 'tables' folder as an input. These counts are then shown in interactive hexabin plots with mass on y-axis and logP on x-axis using the Bokeh Library.
+This script takes a table from the 'tables' folder as an input. These counts are then shown in interactive hexabin plots with mass on y-axis and log *P* on x-axis using the Bokeh Library.
 
 ## Run only once (per month) script
 The following need only be run at most once a month, as this is the current (February 2020) update frequency of the ChEBI ontology itself.
 
 ### update_chebis_test.py
 This script checks the [latest ChEBI ontology](ftp://ftp.ebi.ac.uk/pub/databases/chebi/ontology/) version and compares its version number to the version number in the 'ontology_version.txt' file in the 'files' folder.
-If the version is not up-to-date, new chemicals from the ontology are added with their properties to the ChEBI files in the 'files' folder, and the version number of 'ontology_version.txt' is changed. Predicted values (logP and logS) are retrieved by using the AlogPS3.0 model. This model predicts logP and logS from SMILES. These SMILES are passed through the OCHEM REST-like web service.
+If the version is not up-to-date, new chemicals from the ontology are added with their properties to the ChEBI files in the 'files' folder, and the version number of 'ontology_version.txt' is changed. Predicted values (logP and logS) are retrieved by using the AlogPS3.0 model. This model predicts log *P* and log *S* from the SMILES representation of the chemical entities. These SMILES are passed through the OCHEM REST-like web service.
 
