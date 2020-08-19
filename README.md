@@ -25,7 +25,7 @@ In the 'files' folder, files can be found with ChEBI identifiers linked to a cer
 - The 'plots' folder contains the html files of the interactive plots. Mass is shown on the y-axis and logP is shown on the x-axis.
  The color intensity is log scaled.
  
- - In the 'searches_by_year' folder, data of all publications per year can be found. This data is used to perform tfidf normalization. Not on this repository, might be added later (2019/12/11)
+ - The 'searches_by_year' folder should contain results of all annotated publications per year (or decade). This data is used to perform TFIDF normalization, but can also be used to study research trends without having to repeat the searches. The necessary files are avaiable on the OSF companion project [here](https://osf.io/pvwu2/). Not all years need to be present - SCOPE will read all files in the folder and use these for normalization.
  
 ## Scripts
 In the toolbox are python scripts for the "query search to visualization" workflow, but also scripts that make/update files that are used for visualization (see run only once scripts).
@@ -38,7 +38,6 @@ This scripts takes the results from the 'results' folder as input, as well as th
 
 ### visualize_query.py
 This script takes a table from the 'tables' folder as an input. These counts are then shown in interactive hexabin plots with mass on y-axis and logP on x-axis using the Bokeh Library.
-
 
 ## Run only once (per month) script
 The following need only be run at most once a month, as this is the current (February 2020) update frequency of the ChEBI ontology itself.
