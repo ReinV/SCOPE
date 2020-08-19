@@ -184,6 +184,9 @@ def perform_task(string_of_smiles, SLEEP_TIME, TIMEOUT):
     return json_data["taskId"]
 
 def download_results(task_id, SLEEP_TIME, TIMEOUT):
+    '''
+    This function recieves an OCHEM task id, and uses the task id to download the task output.  
+    '''
     status = 'pending'
     request_url = 'http://ochem.eu/modelservice/fetchModel.do?taskId='+str(task_id)
 
@@ -203,23 +206,19 @@ def download_results(task_id, SLEEP_TIME, TIMEOUT):
                 time.sleep(SLEEP_TIME)
         if connection == True:
             if status == 'error':
-                if len(task_output['predictions'][0]) == 0:
+                if len(task_output['predictions']) == 0:
                     sys.exit('Model predictions failed, script stopped')
             elif status == 'pending':
                 print('Model predictions are still pending: request repeated in %d seconds ...' % SLEEP_TIME)
                 time.sleep(SLEEP_TIME)
 
-        # if connection == True:
-        #     if status == 'error':
-        #         print(status)
-        #         sys.exit('Model predictions failed, script stopped')
-        #     if status == 'pending':
-        #         print('Model predictions are still pending: request repeated in %d seconds ...' % SLEEP_TIME)
-        #         time.sleep(SLEEP_TIME)
 
     return task_output
 
 def get_succesful_predictions(output):
+    '''
+    This function retrieves succesful predictions (predictions that are not 'None').
+    '''
     predictions = []
     for pred in output['predictions']:
         if pred != None:
@@ -227,6 +226,9 @@ def get_succesful_predictions(output):
     return predictions
 
 def store_predictions(predictions, id_to_logS, id_to_logP, id_to_smile, counter, exceptions):
+    '''
+    This function retrieves model predictions, connects these to the corresponding ChEBI ID and adds them to the correct dictionary.
+    '''
     for output_list in predictions:
         try:
             predictions = output_list['predictions']
@@ -244,11 +246,12 @@ def store_predictions(predictions, id_to_logS, id_to_logP, id_to_smile, counter,
 
 def get_new_predictions(id_to_smile):
     '''
-    This function recieves a dictionary with new smiles. It returns two dictionaries with predicted logP and logS values using the smiles.
-    Smiles are put in a string, and added to the url. A task is created which is applying the model AlogPS3.0.
-    After the model is done, the output is downloaded using the task_id.
+    This function recieves a dictionary with new smiles. It returns two dictionaries with predicted logP and logS values.
+    Smiles are put in a string in batches of 200, and added to an url ...
+    With this url using the OCHEM API, a task is created where the model AlogPS3.0 is applied ...
+    After the task is completed, the output is downloaded using the task_id ...
+    Sometimes, output is invalid for a certain SMILE, resulting in a task error. The task needs to be resubmitted for the remaining SMILES.
     '''
-    # print('Getting new predictions from OCHEM...')
 
     TIMEOUT = 100
     SLEEP_TIME = 10
@@ -262,7 +265,6 @@ def get_new_predictions(id_to_smile):
     print(len(id_to_smile))
 
     for i in range(0, len(id_to_smile), BATCH_LENGTH):
-    # for i in range(5600, 5600+BATCH_LENGTH, BATCH_LENGTH):
         print('Getting predictions %d to %d' % (i, i+BATCH_LENGTH))
         difference = BATCH_LENGTH
         end = i + BATCH_LENGTH
@@ -272,6 +274,7 @@ def get_new_predictions(id_to_smile):
             smiles = list(id_to_smile.values())[i:end]
             for smile in smiles:
                 string_of_smiles += str(smile) + '$$$$'
+
             # perform_task
             task_id = perform_task(string_of_smiles, SLEEP_TIME, TIMEOUT)
             task_results = download_results(task_id, SLEEP_TIME, TIMEOUT)
@@ -281,7 +284,7 @@ def get_new_predictions(id_to_smile):
             difference = difference - len(predictions)
             if difference != 0:
                 i = i + len(predictions)
-            print(len(predictions), i, difference, counter)
+
         time.sleep(SLEEP_TIME)
     print('Got prediction errors for %d of %d predictions in total' % (exceptions, counter))
 
@@ -341,6 +344,9 @@ def update_file(id_to_info, file):
     return
 
 def check_latest_ontology_version():
+    '''
+    This function returns the latest ChEBI ontology version without downloading the ontology itself
+    '''
     url = 'ftp://ftp.ebi.ac.uk/pub/databases/chebi/archive/'
     response = urllib.request.urlopen(url)
     archive = response.read()
