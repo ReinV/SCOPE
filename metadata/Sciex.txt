@@ -1,0 +1,6 @@
+metadata for Sciex
+query: ((METHODS:"MS") OR (METHODS:"mass spectrometry") OR (METHODS:"mass spectroscopy")) AND (METHODS:"Sciex")
+search date: 2020-01-11
+number of papers: 15008
+number of chemicals: 1396110
+number of unique chemicals: 12372 (note: not all chemicals can be plotted due to missing logP values)
