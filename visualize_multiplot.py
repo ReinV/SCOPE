@@ -1,6 +1,5 @@
 #!/usr/bin/python
 import time
-
 import numpy as np
 import pandas as pd
 import argparse
@@ -10,12 +9,10 @@ from datetime import datetime
 from os import listdir
 import sys
 
+# BOKEH
 from bokeh import events
 from bokeh.io import output_file, show
-from bokeh.models import HoverTool
-from bokeh.models import CustomJS
-from bokeh.models import HoverTool
-from bokeh.models import CustomJS, ColumnDataSource, Slider, CheckboxGroup, RadioGroup, Button, MultiSelect
+from bokeh.models import CustomJS, HoverTool, ColumnDataSource, Slider, CheckboxGroup, RadioGroup, Button, MultiSelect
 from bokeh.plotting import figure
 from bokeh.transform import linear_cmap
 from bokeh.transform import log_cmap
@@ -25,29 +22,16 @@ from bokeh.layouts import column, row
 from bokeh.palettes import Viridis256, Greys256
 
 def import_table(file):
+    '''
+    This function imports the pkl files from the tables forlder, and returns a pandas dataframe.
+    '''
     table = pd.read_pickle(file)
     return table
 
-def read_file(file):
-    '''
-    This function reads a file and adds the information + id in a dictionary. This is added to another dictionary as value, and the term that describes the
-    information (e.g. "Names") as key.
-    '''
-    f = open(file, 'r')
-    lines = f.readlines()
-    id_to_name = dict()
-    for line in lines:
-        line_to_list = line.split('\t')
-        id = line_to_list[0]
-        name = line_to_list[1].strip()
-        id_to_name[id] = name
-
-    return id_to_name
-
 def create_array(table):
     '''
-    This function recieves the table dictionary and returns numpy arrays with the mass, logP and names of the chemicals.
-    These values and names are repeated corresponding to the count value.
+    This function recieves a dataframe with logP and Mass values for every ChEBI identifier.
+    It returns two numpy arrays: for mass and logP.
     '''
     # create lists
     x = [float(logP) for logP in table.logP]
@@ -57,8 +41,8 @@ def create_array(table):
 
 def hexbin(df, x, y, size, aspect_scale, orientation):
     '''
-    This function recieves x, y coordinates arrays and turns these into q, r hexagon coordinates returned in a pandas dataframe.
-    Additionally, the center x, y coordinates for every hexagon are added.
+    This function recieves x and y coordinate arrays and converts these into q and r hexagon coordinates by calling Bokeh's "cartesian_to_axial" function.
+    The q and r coordinates are added to the dataframe, and this dataframe is returend.
     '''
     q, r = cartesian_to_axial(x, y, size, orientation=orientation, aspect_scale=aspect_scale)
 
@@ -67,81 +51,44 @@ def hexbin(df, x, y, size, aspect_scale, orientation):
 
     return df
 
-def find_most_common(list_names, tooltip_count):
-    '''
-    This function recieves a list of (repeated) chemical ids. It returns a list of the tooltip_count=X most common chemical ids and their counts.
-    In some hexagons there are less than 5 chemicals, if so empty names/counts are returned.
-    '''
-    uniques = list(set(list_names))
-    name_to_count = {}
-
-    # count the amount of appearances for every name in this hexagon
-    for name in uniques:
-        count = list_names.count(name)
-        name_to_count[name] = count
-
-    # sort by count
-    from collections import Counter
-    k = Counter(name_to_count)
-
-    # find 5 highest values
-    high = k.most_common(tooltip_count)
-
-    # make a list of X names, if there are no more names in high, append empty strings as names ...
-    # so that something can be added to the columns when this list is returned
-    most_common_names = []
-    for i in range(tooltip_count):
-        if (i+1) <= len(high):
-            name_and_count = high[i]
-        else:
-            name_and_count = ('', '')
-        most_common_names.append(name_and_count)
-
-    return most_common_names
-
-def get_top_ids(ids, table, tooltip_count):
-    if isinstance(ids, float):
-        top_ids = [['', '', ''] for i in range(tooltip_count)]
-    else:
-        uniques = list(set(ids))
-        name_to_count = {}
-
-        # count the amount of appearances for every name in this hexagon
-        for name in uniques:
-            count = ids.count(name)
-            name_to_count[name] = count
-
-        from collections import Counter
-        k = Counter(name_to_count)
-
-        # find 5 highest values
-        top_ids = [list(most_common + (table["Names"][most_common[0]],)) for most_common in k.most_common(tooltip_count)]
-
-        length_top_ids = len(top_ids)
-        # print(len(top_ids/))
-        while length_top_ids < tooltip_count:
-            top_ids.append(['', '', ''])
-            length_top_ids += 1
-
-    return top_ids
-
 def add_tooltip_columns(df, table):
+    '''
+    For every hexagon, a tooltip will be created that will be shown when the user hovers with the mouse over the hexagon.
+    The tooltip will show the 3 most frequent ChEBI identifiers and additional information.
+
+    This function recieves:
+    - a "df" dataframe (with hexagonal coordinates) that will be the source for the multiplot
+    - the "table" dataframe with information that is needed for the tooltip such as name, mass, logP for every ChEBI identifier
+
+    In this function, the tooltip information will be added to the original dataframe in additional columns.
+    These columns will be used by JavaScript code to display in the tooltip.
+
+    '''
     table = table.drop(['Class', 'logP', 'Mass'], axis=1)
     table = table.reset_index()
 
+    # Define tooltip size
     TOOLTIP_COUNT = 3
     columns = table.columns
     tooltip_columns = {column+str(i):[] for i in range(1, TOOLTIP_COUNT+1) for column in columns}
 
+    # Extract ChEBI identifiers from dataframe
     chebi_ids = [ids if isinstance(ids, list) else [] for ids in df.ChEBI]
     list_for_df = []
+
+    # Use chebi identifiers to look up information in the "table" dataframe
     for ids in chebi_ids:
         rows = table[table.ChEBI.isin(ids)]
+
+        # Sort and select most frequent ChEBI identifiers
         rows = rows.sort_values(by='Count', ascending=False)
         values_nested = rows[0:TOOLTIP_COUNT-1].values.tolist()
+
+        # Unnest information from the table,
         values_unnested = [item for sublist in values_nested for item in sublist]
         while len(values_unnested) < (TOOLTIP_COUNT*len(columns)):
             values_unnested.append("-")
+
         list_for_df.append(values_unnested)
 
     df_tooltip = pd.DataFrame(list_for_df, columns = tooltip_columns)
@@ -150,74 +97,42 @@ def add_tooltip_columns(df, table):
 
     return df
 
-def add_counts(df, table):
-    '''
-    This function recieves a pandas dataframe with q, r coordinates and names as columns.
-    For every row (hexagon), the total amount of chemicals is counted and the 5 most common chemicals are put in seperate columns.
-    '''
-    # Amount of ids shown in the tooltip (e.g. with TOOLTIP_COUNT=3 the 3 most common chebi ids will be shown)
-    # Currently, max value is 3 (see html code for hover tooltip, probably needs to be changed as well when changing this value)
-    TOOLTIP_COUNT = 3
-
-    total_counts = []
-
-    # make columns
-    ids = [[] for _ in range(TOOLTIP_COUNT)]
-    counts = [[] for _ in range(TOOLTIP_COUNT)]
-    names = [[] for _ in range(TOOLTIP_COUNT)]
-
-    for row in df['ids']:
-        # total amount of hits
-        total_counts.append(len(row))
-
-        # count 5 most common unique hits (names), returns list
-        most_common_chemicals = find_most_common(row, TOOLTIP_COUNT)
-
-        # add names to their corresponding columns (most common name in first list, 2nd most common name in second list etc.)
-        for i in range(TOOLTIP_COUNT):
-            id = most_common_chemicals[i][0]
-            count = most_common_chemicals[i][1]
-            try:
-                name = table[id]["Name"]
-            except:
-                name = ""
-
-            ids[i].append(id)
-            counts[i].append(count)
-            names[i].append(name)
-
-    #add lists to df as columns
-    for i in range(TOOLTIP_COUNT):
-        column_name = "id"+str(i+1)
-        df[column_name] = ids[i]
-        column_name = "count"+str(i+1)
-        df[column_name] = counts[i]
-        column_name = "name"+str(i+1)
-        df[column_name] = names[i]
-
-    df['counts'] = total_counts # original count values
-    df['scaling'] = total_counts # column used for root scaling
-
-    return df
-
 def get_blur(x,y,sigma_x,sigma_y):
     '''
     This function recieves x, y values and sigma x, sigma y values and returns the calculated blur value.
     See https://en.wikipedia.org/wiki/Multivariate_normal_distribution
     '''
-
     return exp(-0.5*(x*x/sigma_x/sigma_x + y*y/sigma_y/sigma_y))
 
 def get_rows(q, r, counts, tfidf, kernel, blur_max, step_size):
+    '''
+    For every hexagon (=row in the dataframe), counts will be distributed to surrounding hexagons in a gaussian manner (blur).
+    This function recieves information for one hexagon so that it can distribute its counts to other hexagons.
+    To distribute the counts to other hexagons/rows, we use the "kernel".
+    We create new rows for other hexagons, which means we might create many rows with the same hexagonal coorindates.
+    Newly created rows will be returned
+    '''
+    # initiate original row
     rows = [[q, r, counts, tfidf] + [counts for i in np.arange(0, blur_max+step_size, step_size)] + [tfidf for i in np.arange(0, blur_max+step_size, step_size)]]
+
+    # use kernel to distribute counts to other rows
     for coords_new, blur_factors in kernel.items():
         q_new = q + coords_new[0]
         r_new = r + coords_new[1]
+
+        # create new row, use kernels coordinates and calculated blur values
         new_row = [q_new, r_new, 0, 0] + list(map(lambda n: n * counts, blur_factors)) + list(map(lambda n: n*tfidf, blur_factors))
         rows.append(new_row)
     return rows
 
 def construct_kernel(blur_max, step_size):
+    '''
+    This function recieves the maximum blur and step size to construct the kernel.
+    The kernel is a dictionary that uses the coordinates as keys, and the blur values as values.
+    The blur values depend on sd_x, so the kernel will return a list of blur values from 0 to blur_max.
+    Blur values are calculated by "get_blur()"".
+    The kernel will be used by "get_rows()" to distribute counts to surrounding hexagons.
+    '''
     coordinates_to_distance = {(-5,2):(7.5, sqrt(3)/2),(-5,3):(7.5, sqrt(3)/2),
     (-4,1):(6, sqrt(3)),(-4,2):(6, 0),(-4,3):(6,sqrt(3)),
     (-3,0):(4.5, 3*sqrt(3)/2),(-3,1):(4.5, sqrt(3)/2),(-3,2):(4.5, sqrt(3)/2),(-3,3):(4.5, 3*sqrt(3)/2),
@@ -272,54 +187,65 @@ def add_gaussian_blur(df, blur_max, step_size):
 
     return df_joined
 
-def create_class_source(table, term, size, ratio, orientation, superterm):
-    id_to_name = read_file('files/ChEBI2Names.tsv')
-    x = []
-    y = []
-    counter = 0
+def check_for_ids(id_list, class_id):
+    '''
+    This functions checks if the Class identifier is in the "id_list".
+    This ChEBI ID-specific list contains other ChEBI identifers of chemicals that are of higher level hierarchical class.
+    '''
+    # check = any(class_id == id for id in id_list)
+    check = any(str(class_id) == str(id) for id in id_list)
+    return check
 
-    for id in table.keys():
-        superterms = table[id]["Superterms"]
-        superterms = superterms.strip()
-        superterms = superterms.strip("[]")
-        superterms = superterms.split(',')
-        for class_id in superterms:
-            class_id = class_id.replace("\"", '')
-            class_id = class_id.replace("\'", '')
-            class_id = class_id.strip()
-            try:
-                name = id_to_name[class_id]
-            except:
-                print([class_id])
+def create_class_source(table, size, ratio, orientation, class_id):
+    '''
+    This function finds all chemicals belonging to class "class_id" as defined by the ChEBI ontology.
+    It returns a dataframe filtered for these chemicals.
+    '''
+    if class_id == None:
+        # if no class id is given, then class source should be empty
+        df = pd.DataFrame().reindex_like(table)
 
-            if name == superterm:
-                mass = table[id]["Mass"]
-                logP = table[id]["logP"]
-                x.extend([logP])
-                y.extend([mass])
-    x = np.asarray(x)
-    y = np.asarray(y)
-    q, r = cartesian_to_axial(x, y, size, orientation=orientation, aspect_scale=ratio)
-    df = pd.DataFrame(dict(r=r, q=q))
+    else:
+        table_class_only = table[[check_for_ids(id_list, class_id) for id_list in table["Class"]]]
+
+        # create array
+        x, y = create_array(table_class_only)
+        q, r = cartesian_to_axial(x, y, size, orientation=orientation, aspect_scale=ratio)
+        df = table_class_only.reset_index()
+        df.loc[:,"q"] = q
+        df.loc[:,"r"] = r
+
+        df = df.groupby(['q', 'r']).agg({'Count': 'sum', 'TFIDF': 'sum', 'ChEBI': list}).reset_index()
+        df = df.drop(columns='ChEBI')
+    # Create plot source
     source = ColumnDataSource(df)
 
     return source
 
 def create_data_source(table, term, size, ratio, orientation, BLUR_MAX, BLUR_STEP_SIZE):
-
-    # create array
+    '''
+    This function recieves a query-specific "table" dataframe, and constructs a source for the hexagonal plot.
+    The plot source will be created depending on plot-specific values (size, ratio, orientation).
+    Additionally, a gaussian blur will be applied for different values of sd(x) (BLUR_MAX, BLUR_STEP_SIZE)
+    '''
+    # create array with mass and logP values
     x, y = create_array(table)
+
+    # create hexagonal coordinates from mass and logP values
     q, r = cartesian_to_axial(x, y, size, orientation=orientation, aspect_scale=ratio)
+
+    # create dataframe with hexagonal coordinates as rows (row = hexagon)
     df = table.reset_index()
     df.loc[:,"q"] = q
     df.loc[:,"r"] = r
 
+    # sum rows with identical coordinates together, add blur, and add tooltip information
     df = df.groupby(['q', 'r']).agg({'Count': 'sum', 'TFIDF': 'sum', 'ChEBI': list}).reset_index()
     df = add_gaussian_blur(df, BLUR_MAX, BLUR_STEP_SIZE)
     df = add_tooltip_columns(df, table)
     df = df.drop(columns='ChEBI')
 
-    # title
+    # plot title and source
     title = 'Hexbin plot for '+str(len(x))+' annotated chemicals with query '+str(term)
     source = ColumnDataSource(df)
     return source, title
@@ -330,15 +256,20 @@ def return_JS_code(widget):
     This function recieves a string that indicates the widget.
     It returns a JavaScript callback code corresponding to the widget.
     '''
-    if widget == 'multi_select_test':
+    if widget == 'multi_select':
         code = """
             var source_data = source.data;
+            var source_class_data = source_class.data;
             var term_to_source = term_to_source;
             var term = cb_obj.value[0];
             var f = slider1.value
             var sd_x = slider2.value;
             var p = p;
             var mapper = mapper;
+            var class_hex = class_hex;
+            var checkbox_class = checkbox_class
+            var term_to_class = term_to_class;
+
 
             if (sd_x % 1 == 0){var sd_x = sd_x.toFixed(1)}
             var sd_x = String(sd_x);
@@ -351,7 +282,7 @@ def return_JS_code(widget):
 
             // select new_data
             var new_data = term_to_source[term]['source'].data
-            console.log(new_data)
+            var new_class = term_to_class[term]['source'].data
 
             // replace current data
             for (var key in new_data) {
@@ -360,6 +291,20 @@ def return_JS_code(widget):
                     source_data[key].push(new_data[key][i]);
                 }
             }
+
+            // class
+
+            class_hex.visible = false
+
+            for (var key in new_class){
+                source_class_data[key] = [];
+                for (i=0;i<new_class[key].length;i++) {
+                    source_class_data[key].push(new_class[key][i])
+                }
+            }
+
+            class_hex.source = source_class_data
+            checkbox_class.active = []
 
             // new title
             var title = term_to_source[term]['title']
@@ -375,9 +320,10 @@ def return_JS_code(widget):
             mapper.transform.high = Math.max.apply(Math, source_data['Count'])
 
             // apply changes
+            source_class.change.emit();
             source.change.emit();
         """
-    elif widget == 'slider2_test':
+    elif widget == 'slider2':
         code = """
             var source_data = source.data;
             var f = slider1.value
@@ -497,20 +443,20 @@ def return_JS_code(widget):
             var p = p;
             var Viridis256 = Viridis256;
             var Greys256 = Greys256;
-            var class_hex = class_hex;
-            var term_to_class = term_to_class;
+            // var class_hex = class_hex;
+            // var term_to_class = term_to_class;
             var term = multi_select.value[0]
 
             if (active == 1){
             mapper.transform.palette = Greys256
             p.background_fill_color = '#000000'
-            if (term_to_class[term]['show_class']){class_hex.glyph.fill_color = 'red'}
+            // if (term_to_class[term]['show_class']){class_hex.glyph.fill_color = 'red'}
             }
 
             if (active == 0){
             mapper.transform.palette = Viridis256
             p.background_fill_color = '#440154'
-            if(term_to_class[term]['show_class']){class_hex.glyph.fill_color = 'pink'}
+            // if(term_to_class[term]['show_class']){class_hex.glyph.fill_color = 'pink'}
             }
 
             """
@@ -565,62 +511,15 @@ def return_JS_code(widget):
             var wnd = window.open("about:blank", "", "_blank");
             wnd.document.write(metadata)
             """
-
-    elif widget == 'multi_select':
+    elif widget == 'stats':
         code = """
-            var source_data = source.data;
-            var term_to_source = term_to_source;
-            var term = cb_obj.value[0];
-            var f = slider1.value;
-            var sd_x =  Math.round(slider2.value)
-            var sd_x = String(sd_x)
-            var checkbox = checkbox;
-            var p = p;
-            var mapper = mapper;
-            var metadata = metadata;
-            var class_hex = class_hex;
-            var checkbox_class = checkbox_class
-            var term_to_class = term_to_class;
-
-            // select new_data
-            var new_data = term_to_source[term]['source'].data
-
-            // replace current data
-            for (var column in new_data) {
-                source_data[column] = [];
-                for (i=0;i<new_data[column].length;i++) {
-                    source_data[column].push(new_data[column][i]);
-                }
-            }
-
-            // select correct blur column, apply saturation
-            if (checkbox.active.length == 1) {
-
-            for (var i = 0; i < source_data[sd_x].length; i++) {
-                source_data['scaling'][i] = Math.pow(source_data[sd_x][i][1], 1/f)
-                }
-            } else {
-
-            for (var i = 0; i < source_data[sd_x].length; i++) {
-                source_data['scaling'][i] = Math.pow(source_data[sd_x][i][0], 1/f)
-                }
-            }
-
-            // new title
-            var title = term_to_source[term]['title']
-            p.title.text = title
-
-            // maximum value for fill color
-            mapper.transform.high = Math.max.apply(Math, source_data['scaling'])
-
-            // class
-            if (term_to_class[term]['show_class']){
-                class_hex.visible = false
-                class_hex.source = term_to_class[term]['source']
-                checkbox_class.active = []
-            }
-            source.change.emit();
+            var term_to_stats = term_to_stats
+            var term = multi_select.value[0]
+            var stats_description = term_to_stats[term]
+            var wnd = window.open("about:blank", "", "_blank");
+            wnd.document.write(stats_description)
             """
+
     elif widget == 'class':
         code = """
             var term_to_class = term_to_class;
@@ -638,10 +537,27 @@ def return_JS_code(widget):
             """
     return code
 
+def create_stats_description(table):
+    '''
+    This function recieves the "table" variable and retrieves summary statistcs (mean, std).
+    Statistics are returned in html style.
+    '''
+    total_count = table.Count.sum()
+    mean_logP = np.repeat(table.logP, table.Count).values.astype(float).mean()
+    mean_mass = np.repeat(table.Mass, table.Count).values.astype(float).mean()
+    stdev_logP = np.repeat(table.logP, table.Count).values.astype(float).std()
+    stdev_mass = np.repeat(table.Mass, table.Count).values.astype(float).std()
+    title = 'Statistics of mass and logP values'
+    stats_listed = [title, 'Total amount of chemicals: %d' % total_count , 'LogP mean: %f' % mean_logP, 'LogP standard deviations: %f' % stdev_logP,
+    'Mass mean: %f' % mean_mass, 'Mass standard deviation: %f' % stdev_mass]
+    stats_description = return_html(stats_listed)
+    return stats_description
+
 def return_html(metadata):
     '''
     This function recieves the metadata. The metadata is put in the html string and this string returned.
     '''
+
     html_content = """
     <HTML>
     <HEAD>
@@ -659,7 +575,7 @@ def return_html(metadata):
     """ % (metadata[0], metadata[0], metadata[1], metadata[2], metadata[3], metadata[4], metadata[5])
     return html_content
 
-def plot(tables, output_filename, xmin, xmax, ymin, ymax, superterm):
+def plot(tables, output_filename, xmin, xmax, ymin, ymax, class_id):
     '''
     This is the plot function that uses Bokeh functions and widgets to make an interactive hexagon plot.
 
@@ -703,23 +619,33 @@ def plot(tables, output_filename, xmin, xmax, ymin, ymax, superterm):
     p.xaxis.axis_label_text_font_style = 'normal'
     p.yaxis.axis_label_text_font_style = 'normal'
 
-    # term_to_source, term_to_metadata, options = make_plot_sources(tables, size, ratio, orientation, BLUR_MAX, BLUR_STEP_SIZE)
-
     # source for widgets
     term_to_source = dict()
     term_to_class = dict()
     term_to_metadata = dict()
+    term_to_stats = dict()
 
     options = []
+    # Loop for plot sources
     for term in tables.keys():
         print('sourcing %s' % term)
+
+        # add term to the options for the multiplot
         options.append((term, term))
+
+        # get table
         table = tables[term]['table']
+
+        # plot sources
         source, title = create_data_source(table, term, size, ratio, orientation, BLUR_MAX, BLUR_STEP_SIZE)
+        source_class = create_class_source(table, size, ratio, orientation, class_id)
+        stats_description = create_stats_description(table)
         term_to_source[term] = {'source': source, 'title': title}
+        term_to_class[term] =  {'source': source_class, 'show_class': True}
+        term_to_stats[term] = stats_description
+
         # metadata
         metadata = return_html(tables[term]['metadata'])
-        term_to_source[term] = {'source': source, 'title': title}
         term_to_metadata[term] = metadata
 
     # make default souce for plot, this is the first source shown in the plot, and also works like a container. Old data is thrown out and new data is thrown in.
@@ -735,6 +661,12 @@ def plot(tables, output_filename, xmin, xmax, ymin, ymax, superterm):
     hex = p.hex_tile(q="q", r="r", size=size, line_color=None, source=source, aspect_scale=ratio, orientation=orientation,
            fill_color=mapper)
 
+    if class_id:
+        source_class = create_class_source(table, size, ratio, orientation, class_id)
+        class_hex = p.hex_tile(q='q', r="r", size=size, line_color=None, source=source_class, aspect_scale=ratio,orientation=orientation,
+            fill_color='#ff007f')
+        class_hex.visible = False
+
     # HOVER
     TOOLTIPS = return_JS_code('tooltips')
     code_callback_hover = return_JS_code('hover')
@@ -749,14 +681,21 @@ def plot(tables, output_filename, xmin, xmax, ymin, ymax, superterm):
     checkbox = CheckboxGroup(labels=["TFIDF"], active=[])
     radio_button_group = RadioGroup(labels=["Viridis256", "Greys256"], active=0)
     button = Button(label="Metadata",button_type="default", width=100)
+    stats = Button(label="Statistics",button_type="default", width=100)
+    if class_id:
+        label = "Show "+str(class_id)
+        checkbox_class = CheckboxGroup(labels=["Show "+str(class_id)], active=[])
 
     # Javacode
     code_callback_slider1 = return_JS_code('slider1')
-    code_callback_slider2 = return_JS_code('slider2_test')
-    code_callback_ms = return_JS_code('multi_select_test')
+    code_callback_slider2 = return_JS_code('slider2')
+    code_callback_ms = return_JS_code('multi_select')
     code_callback_checkbox = return_JS_code('checkbox')
     code_callback_rbg = return_JS_code('rbg')
     code_callback_button = return_JS_code('button')
+    code_callback_stats = return_JS_code('stats')
+    if class_id:
+        code_callback_class = return_JS_code('class')
 
     # Callbacks
     callback_slider1 = CustomJS(args={'source': source, 'mapper': mapper, 'slider2': slider2, 'checkbox': checkbox}, code=code_callback_slider1)
@@ -765,6 +704,12 @@ def plot(tables, output_filename, xmin, xmax, ymin, ymax, superterm):
     callback_checkbox = CustomJS(args={'source': source, 'slider2': slider2, 'mapper': mapper, 'slider1': slider1}, code=code_callback_checkbox)
     callback_radio_button_group = CustomJS(args={'p': p, 'multi_select': multi_select, 'mapper': mapper, 'term_to_class': term_to_class, 'Viridis256': Viridis256, 'Greys256': Greys256}, code=code_callback_rbg)
     callback_button = CustomJS(args={'term_to_metadata': term_to_metadata, 'multi_select': multi_select},code=code_callback_button)
+    callback_stats = CustomJS(args={'term_to_stats': term_to_stats, 'multi_select': multi_select},code=code_callback_stats)
+    if class_id:
+        callback_ms = CustomJS(args={'source': source, 'term_to_source': term_to_source, 'slider1': slider1, 'slider2': slider2,
+        'checkbox': checkbox, 'p': p, 'mapper': mapper, 'source_class': source_class, 'term_to_class': term_to_class, 'class_hex': class_hex,
+        'checkbox_class': checkbox_class}, code=code_callback_ms)
+        callback_class = CustomJS(args={'multi_select': multi_select, 'term_to_class': term_to_class, 'class_hex': class_hex}, code=code_callback_class)
 
     # On change
     slider1.js_on_change('value', callback_slider1)
@@ -773,114 +718,16 @@ def plot(tables, output_filename, xmin, xmax, ymin, ymax, superterm):
     checkbox.js_on_change('active', callback_checkbox)
     radio_button_group.js_on_change('active', callback_radio_button_group)
     button.js_on_event(events.ButtonClick, callback_button)
+    stats.js_on_event(events.ButtonClick, callback_stats)
+    if class_id:
+        checkbox_class.js_on_change('active', callback_class)
 
     # Layout
-    layout = row(multi_select, p, column(slider1, slider2, checkbox, radio_button_group, button))
+    if class_id:
+        layout = row(multi_select, p, column(slider1, slider2, checkbox, checkbox_class, radio_button_group, button, stats))
+    else:
+        layout = row(multi_select, p, column(slider1, slider2, checkbox, radio_button_group, button, stats))
     show(layout)
-# -----------------------------------------------------------------------------------------------------------
-        # if superterm:
-        #     source = create_class_source(table, term, size, ratio, orientation, superterm)
-        #     term_to_class[term] = {}
-        #     term_to_class[term]['show_class'] = True
-        #     term_to_class[term]['source'] = source
-        # else:
-        #     term_to_class[term] = {'show_class': False}
-        # source, title = create_data_source(table, term, size, ratio, orientation, BLUR_MAX, BLUR_STEP_SIZE)
-
-    # # plot
-    # hex = p.hex_tile(q="q", r="r", size=size, line_color=None, source=source, aspect_scale=ratio, orientation=orientation,
-    #        fill_color=mapper)
-
-        # metadata = return_html(tables[term]['metadata'])
-        # term_to_source[term] = {'source': source, 'title': title}
-        # term_to_metadata[term] = metadata
-    #
-    # # hex = p.hex_tile(q='q', r="r", size=size, line_color=None, source=source, aspect_scale=ratio,orientation=orientation,
-    # # fill_color='pink' )
-    #
-    # # show(p)
-    #
-    # # make default souce for plot, this is the first source shown in the plot, and also works like a container. Old data is thrown out and new data is thrown in.
-    # default_term = list(tables.keys())[0] # pick the first one
-    # metadata = tables[default_term]['metadata']
-    # metadata = return_html(metadata)
-    # table = tables[default_term]['table']
-    # source, title = create_data_source(table, default_term, size, ratio, orientation, BLUR_MAX, BLUR_STEP_SIZE)
-    # p.title.text = title
-    #
-    # # color mapper
-    # mapper = linear_cmap('scaling', 'Viridis256', 0, max(source.data['scaling']))
-    #
-    # # plot
-    # hex = p.hex_tile(q="q", r="r", size=size, line_color=None, source=source, aspect_scale=ratio, orientation=orientation,
-    #        fill_color=mapper)
-    #
-    # if superterm:
-    #     source_class = term_to_class[default_term]['source']
-    #     class_hex = p.hex_tile(q='q', r="r", size=size, line_color=None, source=source_class, aspect_scale=ratio,orientation=orientation,
-    #         fill_color='pink', fill_alpha=0.7)
-    #     class_hex.visible = False
-    #
-    # # HOVER
-    # TOOLTIPS = return_JS_code('tooltips')
-    # TOOLTIPS_tfidf = return_JS_code('tooltips_tfidf')
-    # code_callback_hover = return_JS_code('hover')
-    # callback_hover = CustomJS(code=code_callback_hover)
-    # hover = HoverTool(renderers=[hex], tooltips=TOOLTIPS, callback=callback_hover, show_arrow=False)
-    # p.add_tools(hover)
-    #
-    # # WIDGETS
-    # slider1 = Slider(start=1, end=SATURATION_MAX, value=1, step=SATURATION_STEP_SIZE, title="Saturation", width=100)
-    # slider2 = Slider(start=0, end=BLUR_MAX, value=0, step=BLUR_STEP_SIZE, title="Blur", width=100)
-    # checkbox = CheckboxGroup(labels=["TFIDF"], active=[])
-    # radio_button_group = RadioGroup(labels=["Viridis256", "Greys256"], active=0)
-    # button = Button(label="Metadata",button_type="default", width=100)
-    # multi_select = MultiSelect(title=output_filename, value=[default_term],options=options, width=100, height=300)
-    # if superterm:
-    #     label = "Show "+str(superterm)
-    #     checkbox_class = CheckboxGroup(labels=[label], active=[])
-    #
-    # # WIDGETS CODE FOR CALLBACK
-    # code_callback_slider1 = return_JS_code('slider1')
-    # code_callback_slider2 = return_JS_code('slider2')
-    # code_callback_checkbox = return_JS_code('checkbox')
-    # code_callback_rbg = return_JS_code('rbg')
-    # code_callback_button = return_JS_code('button')
-    # code_callback_ms = return_JS_code('multi_select')
-    # if superterm:
-    #     code_callback_class = return_JS_code('class')
-    #
-    # # WIDGETS CALLBACK
-    # callback_slider1 = CustomJS(args={'source': source, 'mapper': mapper, 'slider2': slider2, 'checkbox': checkbox}, code=code_callback_slider1)
-    # callback_slider2 = CustomJS(args={'source': source, 'mapper': mapper, 'slider1': slider1, 'checkbox': checkbox}, code=code_callback_slider2)
-    # callback_checkbox = CustomJS(args={'source': source, 'slider1': slider1, 'slider2': slider2, 'mapper': mapper, 'hover': hover, 'tooltips': TOOLTIPS, 'tooltips_tfidf': TOOLTIPS_tfidf}, code=code_callback_checkbox)
-    # callback_radio_button_group = CustomJS(args={'p': p, 'multi_select': multi_select, 'mapper': mapper, 'term_to_class': term_to_class, 'Viridis256': Viridis256, 'Greys256': Greys256}, code=code_callback_rbg)
-    # callback_button = CustomJS(args={'term_to_metadata': term_to_metadata, 'multi_select': multi_select},code=code_callback_button)
-    # callback_ms = CustomJS(args={'source': source, 'term_to_source': term_to_source,  'term_to_class': term_to_class, 'checkbox': checkbox, 'slider2': slider2, 'slider1': slider1, 'p': p, 'mapper': mapper}, code=code_callback_ms)
-    # if superterm:
-    #     callback_radio_button_group = CustomJS(args={'p': p, 'multi_select': multi_select, 'class_hex': class_hex, 'term_to_class': term_to_class, 'mapper': mapper, 'Viridis256': Viridis256, 'Greys256': Greys256}, code=code_callback_rbg)
-    #     callback_class = CustomJS(args={'multi_select': multi_select, 'term_to_class': term_to_class, 'class_hex': class_hex}, code=code_callback_class)
-    #     callback_ms = CustomJS(args={'source': source, 'term_to_source': term_to_source, 'checkbox': checkbox, 'slider2': slider2, 'slider1': slider1, 'p': p, 'mapper': mapper,
-    #     'checkbox_class': checkbox_class, 'class_hex': class_hex, 'term_to_class': term_to_class}, code=code_callback_ms)
-    #
-    # # WIDGETS INTERACTION
-    # slider1.js_on_change('value', callback_slider1)
-    # slider2.js_on_change('value', callback_slider2)
-    # checkbox.js_on_change('active', callback_checkbox)
-    # radio_button_group.js_on_change('active', callback_radio_button_group)
-    # button.js_on_event(events.ButtonClick, callback_button)
-    # multi_select.js_on_change("value", callback_ms)
-    # if superterm:
-    #     checkbox_class.js_on_change('active', callback_class)
-    #
-    # # LAYOUT
-    # if superterm:
-    #     layout = row(multi_select, p, column(slider1, slider2, checkbox, checkbox_class, radio_button_group, button))
-    # else:
-    #     layout = row(multi_select, p, column(slider1, slider2, checkbox, radio_button_group, button))
-    #
-    # show(layout)
-
 
 def get_tables(files):
     '''
@@ -903,7 +750,6 @@ def get_files(folder):
     This function recieves the input folder and returns a list of file paths in this folder.
     '''
     files = ['%s/%s' % (folder, file) for file in listdir(folder) if '.pkl' in file]
-    print(files)
     return files
 
 def parser():
@@ -913,13 +759,12 @@ def parser():
     parser.add_argument('-xmin', required=False, metavar='xmin', dest='xmin', help='[xmin] to select x axis minimum (logP), default is -5')
     parser.add_argument('-xmax', required=False, metavar='xmax', dest='xmax', help='[xmax] to select x axis maximum (logP), default is 10')
     parser.add_argument('-ymax', required=False, metavar='ymax', dest='ymax', help='[ymax] to select y axix maximum (mass in Da), default is 1600')
-    parser.add_argument('-class', required=False, metavar='superterm', dest='superterm', help='[c] to select a class to be shown in the plot with a click on the class button')
+    parser.add_argument('-class', required=False, metavar='class_id', dest='class_id', help='[c] to select a class to be shown in the plot with a click on the class button')
     arguments = parser.parse_args()
     return arguments
 
 def main():
-    startTime = datetime.now()
-    # print(datetime.now() - startTime)
+    # startTime = datetime.now()
 
     args = parser()
     folder = args.input_folder
@@ -945,10 +790,9 @@ def main():
 
     files = get_files(folder)
     tables = get_tables(files)
-    #
-    # #
-    plot(tables, output_filename, xmin, xmax, ymin, ymax, args.superterm)
-    #
+
+    plot(tables, output_filename, xmin, xmax, ymin, ymax, args.class_id)
+
     # print(datetime.now() - startTime)
 
 if __name__ == '__main__':

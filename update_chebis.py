@@ -9,6 +9,7 @@ import urllib.request
 import json
 import time
 import sys
+import pandas as pd
 # from datetime import datetime
 
 def return_latest_ontology():
@@ -185,7 +186,7 @@ def perform_task(string_of_smiles, SLEEP_TIME, TIMEOUT):
 
 def download_results(task_id, SLEEP_TIME, TIMEOUT):
     '''
-    This function recieves an OCHEM task id, and uses the task id to download the task output.  
+    This function recieves an OCHEM task id, and uses the task id to download the task output.
     '''
     status = 'pending'
     request_url = 'http://ochem.eu/modelservice/fetchModel.do?taskId='+str(task_id)
@@ -311,12 +312,28 @@ def read_file(file):
 
     return id_to_info
 
+def rewrite_file_to_pkl(graph, file):
+    '''
+    This function recieves the ontology graph, and the output file path.
+    It retrieves hierarchly classes for every ChEBI identifier in the ontology.
+    The resulting dataframe is written to a .pkl file.
+    '''
+    ids_list = []
+    info_list = []
+    for key in graph.nodes():
+        id = key.split(":")[1]
+        info = get_superterms(key, graph)
+        ids_list.append(id)
+        info_list.append(info)
+    df = pd.DataFrame({'ChEBI': ids_list, 'Info': info_list})
+    df.to_pickle(file)
+    print('%s updated' % file)
+
 def rewrite_file(graph, file):
     '''
     This function recieves the latest ChEBI ontology, and the file that will be overwritten.
     Depending on the file argument, it will get the corresponding information (mass, superterms), and writes this to the file.
     '''
-
     with open(file, 'w', newline='', encoding="utf-8") as tsvfile:
         writer = csv.writer(tsvfile, delimiter = '\t')
         for key in graph.nodes():
@@ -414,7 +431,7 @@ def main():
         update_file(id_to_logS, file='files/ChEBI2logS.tsv')
 
         rewrite_file(graph, 'files/ChEBI2Mass.tsv')
-        rewrite_file(graph, 'files/ChEBI2Class.tsv')
+        rewrite_file_to_pkl(graph, 'files/ChEBI2Class.pkl')
 
         update_version_number(latest_version)
 

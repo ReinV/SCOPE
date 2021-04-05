@@ -19,7 +19,6 @@ def read_searches_by_year():
         path = folder+file
         df_new = pd.read_csv(path, sep='\t', dtype={"ChEBI": "str", "Publication": "str"})
         df = pd.concat([df, df_new])
-    print(df)
     return df
 
 def get_statistics(df):
@@ -52,11 +51,17 @@ def import_properties():
     information (e.g. "Names") as key.
     '''
 
-    files = ['files/ChEBI2Names.tsv', 'files/ChEBI2Mass.tsv', 'files/ChEBI2logP.tsv', 'files/ChEBI2Class.tsv']
+    files = ['files/ChEBI2Names.tsv', 'files/ChEBI2Mass.tsv', 'files/ChEBI2logP.tsv', 'files/ChEBI2Class.pkl']
     data = dict()
     for file in files:
         key = file.split('2')[1].split('.')[0]
-        df = pd.read_csv(file, sep='\t', header=None, names=['ChEBI', 'Info'], index_col='ChEBI')
+        if '.pkl' in file :
+            df = pd.read_pickle(file)
+            df['ChEBI'] = df['ChEBI'].astype(int)
+            df = df.set_index('ChEBI')
+
+        else:
+            df = pd.read_csv(file, sep='\t', header=None, names=['ChEBI', 'Info'], index_col='ChEBI')
         id_to_info = df.to_dict()
         data[key] = id_to_info
     return data
@@ -85,7 +90,9 @@ def make_table(data, df_results):
     # create column lists
     for key in data.keys():
         column_list = [get_info(data, key, id) for id in df_results.index.to_list()]
+
         table.loc[:,key] = column_list
+
     table = table.replace({'Mass': {"-": np.nan}, 'logP': {"-": np.nan}})
     table = table.dropna()
     table = table.sort_values(by='Count', ascending=False)
@@ -124,6 +131,9 @@ def main():
     df_sby = read_searches_by_year()
     chebi_to_npubs, N = get_statistics(df_sby)
 
+    # gather properties
+    data = import_properties()
+
     for result in results:
         term = result.split('\\')[1].split('_ChEBI_IDs.tsv')[0]
         print('making table for %s' % term)
@@ -139,9 +149,6 @@ def main():
         df_results.loc[:,"TFIDF"] = df_results.TFIDF * (total_counts / total_tfidf)
         df_results = df_results.round()
         df_results = df_results.astype({'TFIDF': 'int32'})
-
-        # gather properties
-        data = import_properties()
 
         # make table
         table = make_table(data, df_results)
