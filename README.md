@@ -4,11 +4,39 @@ This toolbox contains python scripts that follow the [EuropePMC2ChEBI KNIME work
 # Workflow
 ![Workflow scheme](workflow_scheme_new_adjusted.png)
 
+# Usage
+
+1. Download the required files from [here](https://osf.io/pvwu2/). Download the "files" and the "searches_by_decade_summarized" folders into the SCOPE project. Please rename the "searches_by_year_summarized" folder to "searches_by_year".
+
+2. Execute "python update_chebis.py". This script will check if the property files can be updated with the latest ChEBI ontology.
+
+Now, all files should be in place and updated to run SCOPE.
+
+-- Run the pipeline --
+
+Execute "python <script name> -h" to get a description of the required arguments.
+
+3. Put the search queries (at least one) in a text file in the following structure:
+<output_tag_1>, <search query 1>
+<output_tag_2>, <search query 2>
+<output_tag_3>, <search query 3>
+
+The search query should be written with the syntax used on the Europe PMC site (see ... ). For example:
+> METHODS:"Nuclear Magnetic Resonance" OR METHODS:NMR OR METHODS:"NMR spectrometry" OR METHODS:"nuclear magnetic resonance spectrometry" OR METHODS:"NMR spectroscopy" OR METHODS:"nuclear magnetic resonance (NMR) spectroscopy"
+
+We provide one example text file in the "queries" folder.
+
+4. Execute "python search_query.py -i queries/<input text file>" to search for all publications. The results will be stored in the "results" folder with the output tag as output name. Warning: this may take up many hours if there are a lot of search hits!
+
+5. Execute "python make_table.py -i results -t folder" to create tables in the "tables" folder for all results.
+
+6. Execute "python visualize_multiplot.py -i tables -o <output name>" to create a plot using the tables in the "tables" folder. This plot will be saved in the "plots" folder.
+
 # Using external sources to get plot properties
-In the 'files' folder, files can be found with ChEBI identifiers linked to a certain property. These do not come from the search itself but can be looked up in the ChEBI Ontology. Additionally, log *P* and log *S* values are predicted using the AlogPS3.0 model from the OCHEM website [ochem.eu site](https://ochem.eu). By executing update_chebis.py, all these properties are gathered and stored in sperate files in the 'files' folder.
+In the 'files' folder, ChEBI identifiers are linked to a certain property. These do not come from the search itself but can be looked up in the ChEBI Ontology. Additionally, log *P* and log *S* values are predicted using the AlogPS3.0 model from the OCHEM website [ochem.eu site](https://ochem.eu).
 
 
-# What's in the Toolbox
+<!-- # What's in the Toolbox
  ## Folders
  The toolbox has five folders:
 
@@ -24,9 +52,9 @@ In the 'files' folder, files can be found with ChEBI identifiers linked to a cer
 
 - The 'plots' folder contains the html files of the interactive plots. By default, mass is shown on the y-axis and log *P* on the x-axis.
  The color intensity is scaled by the *n*th root, where *n* can be adjusted using the saturation slider in the interactive visualization.
- 
+
  - The 'searches_by_year' folder should contain results of all annotated publications per year (or decade). This data is used to perform TFIDF normalization, but can also be used to study research trends without having to repeat the searches. The necessary files are avaiable on the OSF companion project [here](https://osf.io/pvwu2/). Not all years need to be present - SCOPE will read all files in the folder and use these for normalization.
- 
+
 ## Scripts
 In the toolbox are python scripts for the "query search to visualization" workflow, but also scripts that make/update files that are used for visualization (see run only once scripts).
 
@@ -44,5 +72,4 @@ The following need only be run at most once a month, as this is the current (Feb
 
 ### update_chebis_test.py
 This script checks the [latest ChEBI ontology](ftp://ftp.ebi.ac.uk/pub/databases/chebi/ontology/) version and compares its version number to the version number in the 'ontology_version.txt' file in the 'files' folder.
-If the version is not up-to-date, new chemicals from the ontology are added with their properties to the ChEBI files in the 'files' folder, and the version number of 'ontology_version.txt' is changed. Predicted values (logP and logS) are retrieved by using the AlogPS3.0 model. This model predicts log *P* and log *S* from the SMILES representation of the chemical entities. These SMILES are passed through the OCHEM REST-like web service.
-
+If the version is not up-to-date, new chemicals from the ontology are added with their properties to the ChEBI files in the 'files' folder, and the version number of 'ontology_version.txt' is changed. Predicted values (logP and logS) are retrieved by using the AlogPS3.0 model. This model predicts log *P* and log *S* from the SMILES representation of the chemical entities. These SMILES are passed through the OCHEM REST-like web service. -->

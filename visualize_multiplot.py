@@ -178,13 +178,6 @@ def add_gaussian_blur(df, blur_max, step_size):
 
     df_joined = df_blur.merge(df.loc[:,['q', 'r', 'ChEBI']], on=['q', 'r'], how='outer')
 
-    # aggregation_dictionary = {}
-    # for column in df_blur.columns:
-    #     if column != 'q' and column != 'r':
-    #         aggregation_dictionary[column] = 'sum'
-    #
-    # df_blur = df_blur.groupby(['q', 'r'], as_index=False).agg(aggregation_dictionary)
-
     return df_joined
 
 def check_for_ids(id_list, class_id):

@@ -5,51 +5,55 @@ import obonet
 import csv
 import os.path
 import urllib
-import urllib.request
+from urllib.request import urlopen
+from bs4 import BeautifulSoup
+import datetime
 import json
 import time
 import sys
 import pandas as pd
-# from datetime import datetime
 
-def return_latest_ontology():
-    '''
-    This function imports the latest updated version of the ChEBI ontology, and returns the version number and ontology.
-    '''
 
-    print('Importing latest ontology...')
-    file = open('files/chebi.obo', encoding = 'utf8')
-    testfile.retrieve("http://randomsite.com/file.gz", "file.gz")
-    graph = obonet.read_obo(file)
-    version = graph.graph['data-version']
-    return version, graph
+def should_files_be_updated():
+    '''
+    This function retrieves the timestamp of the latest ChEBI ontology, and the timestamp from a file in in the files folder.
+    The timestamps are compared, and if the ontology timestamp is more recent than the file timestamp, a TRUE is returend and the files should be updated.
+    '''
+    # Constants
+    URL = 'http://ftp.ebi.ac.uk/pub/databases/chebi/ontology/'
+    ONTOLOGY_COLUMN = 0
+    DATE_COLUMN = 1
+    DAY_POS = 0
+    MONTH_POS = 1
+    YEAR_POS = 2
+    ONTOLOGY_NAME = 'chebi.obo'
+    DATE_SYNTAX = '%d-%b-%Y'
+    FILE_TO_CHECK = 'files/ChEBI2Names.tsv'
 
-def return_current_version():
-    '''
-    This function opens the ChEBI files with id's and names, and returns the version number used to update this file.
-    '''
-    file = open('files/ontology_version.txt', 'r')
-    version = file.read()
-    return version
+    # Get ChEBI ontolgoy page into df
+    html = urlopen(URL).read()
+    soup = BeautifulSoup(html, features="html.parser")
+    soup.get_text()
+    df = pd.DataFrame([x.split() for x in soup.get_text().split('\n')])
 
-def return_archived_ontology(version):
+    # Get date from df
+    date = df[df[ONTOLOGY_COLUMN] == ONTOLOGY_NAME].values[0][DATE_COLUMN]
+
+    # Create timestamp from date and file in the files folder
+    date_object = datetime.datetime.strptime(date, DATE_SYNTAX)
+    timestamp_ontology = datetime.datetime.timestamp(date_object)
+    timestamp_file = os.path.getmtime(FILE_TO_CHECK)
+
+    return timestamp_ontology > timestamp_file
+
+def get_ontology():
     '''
-    This function returns an archived ontology based on the version number.
+    This function imports the latest ChEBI ontology.
     '''
-    url = 'ftp://ftp.ebi.ac.uk/pub/databases/chebi/archive/rel' + version + '/ontology/chebi.obo'
-    graph = obonet.read_obo(url)
+    URL = 'ftp://ftp.ebi.ac.uk/pub/databases/chebi/ontology/chebi.obo'
+    graph = obonet.read_obo(URL)
+    # graph = obonet.read_obo('chebi.obo')
     return graph
-
-def show_updates(graph_new, graph_old):
-    '''
-    This function compares two ontologies and returnes the difference in nodes and edges (chemicals and relations).
-    '''
-    total_nodes = len(graph_new)
-    total_edges = graph_new.number_of_edges()
-    difference_nodes = total_nodes - len(graph_old)
-    difference_edges = total_edges - graph_old.number_of_edges()
-    message = 'Latest ChEBI ontology contains %d new chemicals of %d total chemicals...\nand %d new relations of %d total relations' % (difference_nodes, total_nodes, difference_edges, total_edges)
-    return message
 
 def get_mass(node, graph):
     '''
@@ -116,14 +120,6 @@ def get_superterms(id, graph):
 
     return list_relations
 
-def update_version_number(number):
-    '''
-    This function updates the ontology version text file with the version number of the ontology by which the files have been updated.
-    '''
-    file = open('files/ontology_version.txt', 'w')
-    file.write(number)
-    return
-
 def get_new_names(graph, file):
     '''
     This function recieves the latest ChEBI ontolog, and the file containing the ChEBI names.
@@ -159,6 +155,8 @@ def get_new_smiles(graph, file):
     return id_to_smile
 
 def perform_task(string_of_smiles, SLEEP_TIME, TIMEOUT):
+    '''
+    '''
     MODEL_ID = 4 # AlogPS3.0 model id
     url = 'https://ochem.eu/modelservice/postModel.do?'
     values = {'modelId': MODEL_ID, 'mol': string_of_smiles}
@@ -171,7 +169,6 @@ def perform_task(string_of_smiles, SLEEP_TIME, TIMEOUT):
             data = data.encode('ascii')
             response = urllib.request.urlopen(url, data, timeout=TIMEOUT)
             json_data = json.loads(response.read())
-            print(json_data)
             if json_data["taskId"] == 0:
                 connection = False
                 print('task failed, trying again in %d seconds' % SLEEP_TIME)
@@ -263,7 +260,7 @@ def get_new_predictions(id_to_smile):
     id_to_logP = dict()
     id_to_logS = dict()
 
-    print(len(id_to_smile))
+    print("Total new predictions: %d" % len(id_to_smile))
 
     for i in range(0, len(id_to_smile), BATCH_LENGTH):
         print('Getting predictions %d to %d' % (i, i+BATCH_LENGTH))
@@ -360,80 +357,34 @@ def update_file(id_to_info, file):
     print('%s updated' % file)
     return
 
-def check_latest_ontology_version():
-    '''
-    This function returns the latest ChEBI ontology version without downloading the ontology itself
-    '''
-    url = 'ftp://ftp.ebi.ac.uk/pub/databases/chebi/archive/'
-    response = urllib.request.urlopen(url)
-    archive = response.read()
-    version = archive.split()[-1].decode('UTF-8').split('rel')[1]
-    print("Latest ontology version: %s" % version)
-    return version
-
-
 def main():
-    # check for latest version
-    latest_version = check_latest_ontology_version()
 
-    # ontology path and url
-    ontology_path = 'files/chebi.obo'
-    url = 'ftp://ftp.ebi.ac.uk/pub/databases/chebi/ontology/chebi.obo'
-
-    # check for obo file
-    try:
-        file = open(ontology_path, encoding = 'utf8')
-        print('Importing ChEBI ontology')
-        graph = obonet.read_obo(file)
-        version = graph.graph['data-version']
-
-        # if obo file not in files folder or not up to date, download new one
-        if version != latest_version:
-            print("Downloading latest ontology")
-            url = 'ftp://ftp.ebi.ac.uk/pub/databases/chebi/ontology/chebi.obo'
-            urllib.request.urlretrieve(url, ontology_path)
-            file = open(ontology_path, encoding = 'utf8')
-            graph = obonet.read_obo(file)
-            version = graph.graph['data-version']
-    except:
-        print('No chebi.obo file in the files folder, downloading and saving most recent ontology file...')
-        urllib.request.urlretrieve(url, ontology_path)
-        file = open(ontology_path, encoding = 'utf8')
-        graph = obonet.read_obo(file)
-        version = graph.graph['data-version']
-
-    # check if (downloaded) ontology version is correct
-    if version != latest_version:
-        print('Something went wrong')
-
-    current_version = return_current_version()
-
-    print('ChEBI version used to update files: %s' % current_version)
-    print('ChEBI latest version: %s' % latest_version)
-
-    if current_version == latest_version:
-        print('Files are up-to-date')
-    else:
+    if should_files_be_updated():
         print('Files need updating ...')
-        graph_old = return_archived_ontology(current_version)
-        updates = show_updates(graph, graph_old)
-        # clear memory
-        graph_old = []
-        print(updates)
 
+        # Import ontology
+        print('Importing ontology')
+        graph = get_ontology()
+
+        # Retrieve information from the ontology
+        print('Retrieving info from ontology')
         id_to_name = get_new_names(graph, file='files/ChEBI2Names.tsv')
         id_to_smile = get_new_smiles(graph, file='files/ChEBI2Smiles.tsv')
         id_to_logP, id_to_logS = get_new_predictions(id_to_smile)
 
+        # Update the files with new information
+        print('Updating files ...')
         update_file(id_to_name, file='files/ChEBI2Names.tsv')
         update_file(id_to_smile, file='files/ChEBI2Smiles.tsv')
         update_file(id_to_logP, file='files/ChEBI2logP.tsv')
         update_file(id_to_logS, file='files/ChEBI2logS.tsv')
 
+        # Some files we rewrite in stead of updating
         rewrite_file(graph, 'files/ChEBI2Mass.tsv')
         rewrite_file_to_pkl(graph, 'files/ChEBI2Class.pkl')
 
-        update_version_number(latest_version)
+    else:
+        print('Files are up-to-date')
 
 if __name__ == '__main__':
     main()

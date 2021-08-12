@@ -122,7 +122,7 @@ def main():
         results = [input]
     elif input_type == 'folder':
         files = listdir(input)
-        results = [input+'\\'+file for file in files]
+        results = [input+'/'+file for file in files]
     else:
         sys.exit('Error: please give \'file\' or \'folder\' as input type')
 
@@ -135,11 +135,11 @@ def main():
     data = import_properties()
 
     for result in results:
-        term = result.split('\\')[1].split('_ChEBI_IDs.tsv')[0]
+        term = result.split('/')[1].split('_ChEBI_IDs.tsv')[0]
         print('making table for %s' % term)
 
         # import results
-        df = pd.read_csv(result, sep = '\t', names=['ChEBI', 'Publication'])
+        df = pd.read_csv(result, sep = '\t', names=['ChEBI', 'Publication'], dtype={"ChEBI": "int", "Publication": "str"})
         df_results = df.groupby(by=['ChEBI']).count().rename(columns={"Publication": "Count"})
 
         # perform normalization
