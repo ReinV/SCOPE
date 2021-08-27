@@ -17,9 +17,9 @@ Execute "python <script name> -h" to get a description of the required arguments
 1. (Optional) Execute "python update_chebis.py". This script will check if the property files in the "files" folder can be updated with the latest ChEBI ontology.
 
 2. Put the search queries (at least one) in a text file in the following structure:
-<output_tag_1>, <search query 1>
-<output_tag_2>, <search query 2>
-<output_tag_3>, <search query 3>
+<output_tag_1>, <search query 1> <br />
+<output_tag_2>, <search query 2> <br />
+<output_tag_3>, <search query 3> <br />
 
 The search query should be written with the syntax used on the Europe PMC site (see ... ). For example:
 > METHODS:"Nuclear Magnetic Resonance" OR METHODS:NMR OR METHODS:"NMR spectrometry" OR METHODS:"nuclear magnetic resonance spectrometry" OR METHODS:"NMR spectroscopy" OR METHODS:"nuclear magnetic resonance (NMR) spectroscopy"
