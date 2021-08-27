@@ -4,19 +4,19 @@ This toolbox contains python scripts that follow the [EuropePMC2ChEBI KNIME work
 # Workflow
 ![Workflow scheme](workflow_scheme_new_adjusted.png)
 
-# Usage
+# Preparing SCOPE
 
-1. Download the required files from [here](https://osf.io/pvwu2/). Download the "files" and the "searches_by_decade_summarized" folders into the SCOPE project. Please rename the "searches_by_year_summarized" folder to "searches_by_year".
-
-2. Execute "python update_chebis.py". This script will check if the property files can be updated with the latest ChEBI ontology.
+1. Run downlaod_files.py. This script will download the required files from the [OSF project](https://osf.io/pvwu2/) in the correct folders.
 
 Now, all files should be in place and updated to run SCOPE.
 
--- Run the pipeline --
+# Usage
 
 Execute "python <script name> -h" to get a description of the required arguments.
 
-3. Put the search queries (at least one) in a text file in the following structure:
+1. (Optional) Execute "python update_chebis.py". This script will check if the property files in the "files" folder can be updated with the latest ChEBI ontology.
+
+2. Put the search queries (at least one) in a text file in the following structure:
 <output_tag_1>, <search query 1>
 <output_tag_2>, <search query 2>
 <output_tag_3>, <search query 3>
