@@ -8,7 +8,7 @@ This toolbox contains python scripts that follow the [EuropePMC2ChEBI KNIME work
 
 1. Run download_files.py. This script will download the required files from the [OSF project](https://osf.io/pvwu2/) and create subfolders under the current folder.
 
-Now, all files should be in place and updated to run SCOPE.
+All files should now be in place for running SCOPE.
 
 # Usage
 
