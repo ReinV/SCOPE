@@ -8,6 +8,7 @@ import concurrent.futures
 import csv
 import time
 import datetime
+import math
 
 def construct_url(query, pageSize, cursorMark):
     """
@@ -71,19 +72,27 @@ def search_publications(query, pageSize):
     url = construct_url(query, pageSize, cursorMark)
     query_data = get_data(url, TIMEOUT, SLEEP_TIME)
     total_hits = query_data['hitCount']
-    nextcursormark = query_data['nextCursorMark']
+    print("total hits: %d" % total_hits)
+
+    try:
+        nextCursorMark = query_data['nextCursorMark']
+    except:
+        nextCursorMark = None
     publications = find_publications_with_tmt(query_data)
     chebi_dict = get_annotations(publications, chebi_dict)
 
     counter = 1
-    while cursorMark != nextcursormark:
+    while nextCursorMark != None:
 
-        print('%d/%d publications retrieved' % (counter*1000, total_hits))
+        print('%d/%d pages retrieved' % (counter, math.ceil(total_hits/1000)))
 
-        cursorMark = nextcursormark
+        cursorMark = nextCursorMark
         url = construct_url(query, pageSize, cursorMark)
         query_data = get_data(url, TIMEOUT, SLEEP_TIME)
-        nextcursormark = query_data['nextCursorMark']
+        try:
+            nextCursorMark = query_data['nextCursorMark']
+        except:
+            nextCursorMark = None
         publications = find_publications_with_tmt(query_data)
         chebi_dict = get_annotations(publications, chebi_dict)
 
