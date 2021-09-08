@@ -25,7 +25,7 @@ The search query should be written with the syntax used on the Europe PMC site (
 
 We provide one example text file in the "queries" folder.
 
-4. Execute "python search_query.py -i queries/\<input text file>" to search for all publications. The results will be stored in the "results" folder with the output tag as output name. Warning: this may take up many hours if there are a lot of search hits!
+4. Execute "python search_query.py -i queries/\<input text file>" to search for all publications. The results will be stored in the "results" folder with the output tag as output name. Warning: this may take up to several hours if there are many search hits. It is recommended to start with a more specific search when trying out SCOPE for the first time.
 
 5. Execute "python make_table.py -i results -t folder" to create tables in the "tables" folder for all results.
 
