@@ -249,7 +249,7 @@ def return_JS_code(widget):
     This function recieves a string that indicates the widget.
     It returns a JavaScript callback code corresponding to the widget.
     '''
-    if widget == 'multi_select':
+    if widget == 'multi_select_class':
         code = """
             var source_data = source.data;
             var source_class_data = source_class.data;
@@ -314,6 +314,53 @@ def return_JS_code(widget):
 
             // apply changes
             source_class.change.emit();
+            source.change.emit();
+        """
+    if widget == 'multi_select':
+        code = """
+            var source_data = source.data;
+            var term_to_source = term_to_source;
+            var term = cb_obj.value[0];
+            var f = slider1.value
+            var sd_x = slider2.value;
+            var p = p;
+            var mapper = mapper;
+
+
+            if (sd_x % 1 == 0){var sd_x = sd_x.toFixed(1)}
+            var sd_x = String(sd_x);
+
+            // check for tfidf
+
+            if (checkbox.active.length == 1) {
+            sd_x = sd_x.concat('_tfidf')
+            }
+
+            // select new_data
+            var new_data = term_to_source[term]['source'].data
+
+            // replace current data
+            for (var key in new_data) {
+                source_data[key] = [];
+                for (i=0;i<new_data[key].length;i++) {
+                    source_data[key].push(new_data[key][i]);
+                }
+            }
+
+            // new title
+            var title = term_to_source[term]['title']
+            p.title.text = title
+
+            // apply blur and saturation
+
+            for (var i = 0; i < source_data[sd_x].length; i++) {
+                source_data['Count'][i] = Math.pow(source_data[sd_x][i], 1/f)
+                }
+
+            // maximum value for fill_color
+            mapper.transform.high = Math.max.apply(Math, source_data['Count'])
+
+            // apply changes
             source.change.emit();
         """
     elif widget == 'slider2':
@@ -688,6 +735,7 @@ def plot(tables, output_filename, xmin, xmax, ymin, ymax, class_id):
     code_callback_button = return_JS_code('button')
     code_callback_stats = return_JS_code('stats')
     if class_id:
+        code_callback_ms = return_JS_code('multi_select_class')
         code_callback_class = return_JS_code('class')
 
     # Callbacks
