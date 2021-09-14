@@ -29,7 +29,7 @@ We provide one example text file in the "queries" folder.
 
 5. Execute "python make_table.py -i results -t folder" to create tables in the "tables" folder for all results.
 
-6. Execute "python visualize_multiplot.py -i tables -o <output name>" to create a plot using the tables in the "tables" folder. This plot will be saved in the "plots" folder.
+6. Execute "python visualize_multiplot.py -i tables -o \<output name>" to create a plot using the tables in the "tables" folder. This plot will be saved in the "plots" folder.
 
 # Using external sources to get plot properties
 In the 'files' folder, ChEBI identifiers are linked to a certain property. These do not come from the search itself but can be looked up in the ChEBI Ontology. Additionally, log *P* and log *S* values are predicted using the AlogPS3.0 model from the OCHEM website [ochem.eu site](https://ochem.eu).
