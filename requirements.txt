@@ -4,7 +4,7 @@ decorator==4.4.2
 Jinja2==2.11.3
 MarkupSafe==1.1.1
 networkx==2.5
-numpy==1.19.1
+numpy==1.21.0
 obonet==0.2.5
 packaging==20.4
 pandas==1.1.2
