@@ -399,6 +399,12 @@ def rename_file(file, latest_release):
 
 
 def main():
+
+    # Workflow should be 
+    # 1. find relase on ChEBI
+    # 2. get release versions of files on OSF storage
+    # 3. if they are different: update files on OSF storage
+
     # Get file names from the files folder
     files = [os.path.join('files', file) for file in os.listdir('files')]
 
