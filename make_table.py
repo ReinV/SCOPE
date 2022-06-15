@@ -1,11 +1,14 @@
 #!/usr/bin/python
 
+
 import argparse
 import math
 import sys
 import pandas as pd
 import numpy as np
-from os import listdir
+import os
+from pathlib import PurePath
+# from os import listdir
 
 def read_searches_by_year():
     '''
@@ -13,7 +16,7 @@ def read_searches_by_year():
     and returns a dataframe with ChEBI and Publication identifiers.
     '''
     folder = 'searches_by_year/'
-    files = [file for file in listdir(folder) if '.tsv' in file]
+    files = [file for file in os.listdir(folder) if '.tsv' in file]
     df = pd.DataFrame(columns=["ChEBI", "Publication"])
     for file in files:
         path = folder+file
@@ -50,18 +53,19 @@ def import_properties():
     This function reads a file and adds the information + id in a dictionary. This is added to another dictionary as value, and the term that describes the
     information (e.g. "Names") as key.
     '''
-
-    files = ['files/ChEBI2Names.tsv', 'files/ChEBI2Mass.tsv', 'files/ChEBI2logP.tsv', 'files/ChEBI2Class.pkl']
+    FOLDER = 'files'
+    files = os.listdir(FOLDER)
     data = dict()
     for file in files:
-        key = file.split('2')[1].split('.')[0]
+        path = os.path.join(FOLDER, file)
+        key = file.split('2')[1].split('_')[0]
         if '.pkl' in file :
-            df = pd.read_pickle(file)
+            df = pd.read_pickle(path)
             df['ChEBI'] = df['ChEBI'].astype(int)
             df = df.set_index('ChEBI')
 
         else:
-            df = pd.read_csv(file, sep='\t', header=None, names=['ChEBI', 'Info'], index_col='ChEBI')
+            df = pd.read_csv(path, sep='\t', header=None, names=['ChEBI', 'Info'], index_col='ChEBI')
         id_to_info = df.to_dict()
         data[key] = id_to_info
     return data
@@ -121,7 +125,7 @@ def main():
     if input_type == 'file':
         results = [input]
     elif input_type == 'folder':
-        files = listdir(input)
+        files = os.listdir(input)
         results = [input+'/'+file for file in files]
     else:
         sys.exit('Error: please give \'file\' or \'folder\' as input type')
@@ -135,7 +139,7 @@ def main():
     data = import_properties()
 
     for result in results:
-        term = result.split('/')[1].split('_ChEBI_IDs.tsv')[0]
+        term = PurePath(result).parts[1].split('_ChEBI_IDs.tsv')[0]
         print('making table for %s' % term)
 
         # import results

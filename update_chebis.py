@@ -13,22 +13,10 @@ import time
 import sys
 import pandas as pd
 
-
-def should_files_be_updated():
+def get_latest_release():
     '''
-    This function retrieves the timestamp of the latest ChEBI ontology, and the timestamp from a file in in the files folder.
-    The timestamps are compared, and if the ontology timestamp is more recent than the file timestamp, a TRUE is returend and the files should be updated.
     '''
-    # Constants
-    URL = 'http://ftp.ebi.ac.uk/pub/databases/chebi/ontology/'
-    ONTOLOGY_COLUMN = 0
-    DATE_COLUMN = 1
-    DAY_POS = 0
-    MONTH_POS = 1
-    YEAR_POS = 2
-    ONTOLOGY_NAME = 'chebi.obo'
-    DATE_SYNTAX = '%d-%b-%Y'
-    FILE_TO_CHECK = 'files/ChEBI2Names.tsv'
+    URL = 'http://ftp.ebi.ac.uk/pub/databases/chebi/archive/'
 
     # Get ChEBI ontolgoy page into df
     html = urlopen(URL).read()
@@ -36,15 +24,23 @@ def should_files_be_updated():
     soup.get_text()
     df = pd.DataFrame([x.split() for x in soup.get_text().split('\n')])
 
-    # Get date from df
-    date = df[df[ONTOLOGY_COLUMN] == ONTOLOGY_NAME].values[0][DATE_COLUMN]
+    release = df.sort_values(by=0, ascending=False).iloc[0,0]
+    release = release.replace("/", "")
 
-    # Create timestamp from date and file in the files folder
-    date_object = datetime.datetime.strptime(date, DATE_SYNTAX)
-    timestamp_ontology = datetime.datetime.timestamp(date_object)
-    timestamp_file = os.path.getmtime(FILE_TO_CHECK)
+    return release
 
-    return timestamp_ontology > timestamp_file
+def should_files_be_updated(files, latest_release):
+    '''
+    '''
+    update_these_files = []
+    for file in files:
+        release = file.split(".")[0].split("_")[1]
+
+        if latest_release > release:
+            update_these_files.append(file)
+
+    return update_these_files
+
 
 def get_ontology():
     '''
@@ -55,18 +51,27 @@ def get_ontology():
     # graph = obonet.read_obo('chebi.obo')
     return graph
 
-def get_mass(node, graph):
+def get_mass(graph, file):
     '''
     This function retrieves the mass of a molecule from the ontology.
     '''
-    mass = "-"
-    try:
-        for string in graph.nodes[node]['property_value']:
-            if 'mass' in string and 'monoisotopicmass' not in string:
-                mass = string.split('\"')[1] # wat te doen met een 0 ?
-    except:
-        pass
-    return mass
+    id_to_info = read_file(file)
+    id_to_mass = {}
+    for node in graph.nodes():
+        id = node.split(":")[1]
+        try:
+            id_to_info[id]
+        except:
+            mass = "-"
+            try:
+                for string in graph.nodes[node]['property_value']:
+                    if 'mass' in string and 'monoisotopicmass' not in string:
+                        mass = string.split('\"')[1] # wat te doen met een 0 ?
+            except:
+                pass
+
+            id_to_mass[id] = mass
+    return id_to_mass
 
 def get_smile(node, graph):
     '''
@@ -160,7 +165,7 @@ def perform_task(string_of_smiles, SLEEP_TIME, TIMEOUT):
     MODEL_ID = 4 # AlogPS3.0 model id
     url = 'https://ochem.eu/modelservice/postModel.do?'
     values = {'modelId': MODEL_ID, 'mol': string_of_smiles}
-
+    print(url)
     # Start task
     connection = False
     while connection == False:
@@ -169,6 +174,7 @@ def perform_task(string_of_smiles, SLEEP_TIME, TIMEOUT):
             data = data.encode('ascii')
             response = urllib.request.urlopen(url, data, timeout=TIMEOUT)
             json_data = json.loads(response.read())
+            print(json_data)
             if json_data["taskId"] == 0:
                 connection = False
                 print('task failed, trying again in %d seconds' % SLEEP_TIME)
@@ -188,6 +194,7 @@ def download_results(task_id, SLEEP_TIME, TIMEOUT):
     status = 'pending'
     request_url = 'http://ochem.eu/modelservice/fetchModel.do?taskId='+str(task_id)
 
+    print(request_url)
     while status == 'pending':
         connection = False
         try:
@@ -204,8 +211,9 @@ def download_results(task_id, SLEEP_TIME, TIMEOUT):
                 time.sleep(SLEEP_TIME)
         if connection == True:
             if status == 'error':
-                if len(task_output['predictions']) == 0:
-                    sys.exit('Model predictions failed, script stopped')
+                print(task_output)
+                # if len(task_output['predictions']) == 0:
+                sys.exit('Model predictions failed, script stopped')
             elif status == 'pending':
                 print('Model predictions are still pending: request repeated in %d seconds ...' % SLEEP_TIME)
                 time.sleep(SLEEP_TIME)
@@ -253,7 +261,7 @@ def get_new_predictions(id_to_smile):
 
     TIMEOUT = 100
     SLEEP_TIME = 10
-    BATCH_LENGTH = 200
+    BATCH_LENGTH = 100
 
     counter = 0
     exceptions = 0
@@ -309,7 +317,7 @@ def read_file(file):
 
     return id_to_info
 
-def rewrite_file_to_pkl(graph, file):
+def rewrite_file_to_pkl(file, graph):
     '''
     This function recieves the ontology graph, and the output file path.
     It retrieves hierarchly classes for every ChEBI identifier in the ontology.
@@ -335,20 +343,18 @@ def rewrite_file(graph, file):
         writer = csv.writer(tsvfile, delimiter = '\t')
         for key in graph.nodes():
             id = key.split(":")[1]
-            if file == 'files/ChEBI2Mass.tsv':
-                info = get_mass(key, graph)
-            elif file == 'files/ChEBI2Class.tsv':
-                info = get_superterms(key, graph)
+            info = get_superterms(key, graph)
             writer.writerow([id, info])
     print('%s updated' % file)
 
     return
 
-def update_file(id_to_info, file):
+def write_to_file(file, id_to_info):
     '''
     This function recieves a dictionary and a file.
     Information in the dictionary will be added to that file.
     '''
+
     with open(file, 'a', newline='', encoding="utf-8") as tsvfile:
         writer = csv.writer(tsvfile, delimiter = '\t')
         for id in id_to_info:
@@ -357,35 +363,85 @@ def update_file(id_to_info, file):
     print('%s updated' % file)
     return
 
-def main():
+def update_file(file, graph, id_to_smiles, id_to_logP, id_to_logS):
+    '''
+    '''
+    if "Mass" in file:
+        id_to_mass = get_mass(graph, file)
+        write_to_file(file, id_to_mass)
 
-    if should_files_be_updated():
-        print('Files need updating ...')
+    if "Names" in file:
+        id_to_mass = get_new_names(graph, file)
+        write_to_file(file, id_to_mass)
+
+    if "Smiles" in file:
+        write_to_file(file, id_to_smiles)
+
+    if "logP" in file:
+        write_to_file(file, id_to_logP)
+
+    if "logS" in file:
+        write_to_file(file, id_to_logS)
+
+    if "Class" in file:
+        rewrite_file_to_pkl(file, graph)
+
+def rename_file(file, latest_release):
+    '''
+    '''
+    p1 = file.split("_")[0]
+    p2 = file.split(".")[1]
+    new_name = p1+"_"+latest_release+"."+p2
+
+    os.rename(file, new_name)
+
+# def get_latest_release():
+
+
+def main():
+    # Get file names from the files folder
+    files = [os.path.join('files', file) for file in os.listdir('files')]
+
+    # Get latest ChEBI ontology release
+    latest_release = get_latest_release()
+
+    # Check if files should be updated
+    update_these_files = should_files_be_updated(files, latest_release)
+
+    if len(update_these_files) > 0:
+        print('Files need updating')
 
         # Import ontology
-        print('Importing ontology')
+        print('Importing ontology...')
         graph = get_ontology()
 
-        # Retrieve information from the ontology
-        print('Retrieving info from ontology')
-        id_to_name = get_new_names(graph, file='files/ChEBI2Names.tsv')
-        id_to_smile = get_new_smiles(graph, file='files/ChEBI2Smiles.tsv')
-        id_to_logP, id_to_logS = get_new_predictions(id_to_smile)
+        print("Updating Files...")
 
-        # Update the files with new information
-        print('Updating files ...')
-        update_file(id_to_name, file='files/ChEBI2Names.tsv')
-        update_file(id_to_smile, file='files/ChEBI2Smiles.tsv')
-        update_file(id_to_logP, file='files/ChEBI2logP.tsv')
-        update_file(id_to_logS, file='files/ChEBI2logS.tsv')
+        smiles_file_listed = [file for file in update_these_files if "Smiles" in file]
+        logp_file_listed = [file for file in update_these_files if "logP" in file]
+        logs_file_listed = [file for file in update_these_files if "logS" in file]
 
-        # Some files we rewrite in stead of updating
-        rewrite_file(graph, 'files/ChEBI2Mass.tsv')
-        rewrite_file_to_pkl(graph, 'files/ChEBI2Class.pkl')
+        if len(smiles_file_listed) > 0:
+            smiles_file = smiles_file_listed[0]
+            id_to_smiles = get_new_smiles(graph, smiles_file)
+
+            if len(logp_file_listed) > 0 or len(logs_file_listed) > 0:
+                id_to_logP, id_to_logS = get_new_predictions(id_to_smiles)
+            else:
+                id_to_logP = None
+                id_to_logS = None
+        else:
+            id_to_logP = None
+            id_to_logS = None
+            id_to_smiles = None
+
+        for file in update_these_files:
+            update_file(file, graph, id_to_smiles, id_to_logP, id_to_logS)
+            rename_file(file, latest_release)
 
     else:
         print('Files are up-to-date')
-
+    #
 
 
 if __name__ == '__main__':
