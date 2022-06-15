@@ -82,7 +82,7 @@ def add_tooltip_columns(df, table):
 
         # Sort and select most frequent ChEBI identifiers
         rows = rows.sort_values(by='Count', ascending=False)
-        values_nested = rows[0:TOOLTIP_COUNT-1].values.tolist()
+        values_nested = rows[0:TOOLTIP_COUNT].values.tolist()
 
         # Unnest information from the table,
         values_unnested = [item for sublist in values_nested for item in sublist]
@@ -234,9 +234,11 @@ def create_data_source(table, term, size, ratio, orientation, BLUR_MAX, BLUR_STE
 
     # sum rows with identical coordinates together, add blur, and add tooltip information
     df = df.groupby(['q', 'r']).agg({'Count': 'sum', 'TFIDF': 'sum', 'ChEBI': list}).reset_index()
+
     df = add_gaussian_blur(df, BLUR_MAX, BLUR_STEP_SIZE)
     df = add_tooltip_columns(df, table)
     df = df.drop(columns='ChEBI')
+    df.loc[:,"Count_total"] = df.loc[:,"Count"]
 
     # plot title and source
     title = 'Hexbin plot for '+str(len(x))+' annotated chemicals with query '+str(term)
@@ -262,7 +264,6 @@ def return_JS_code(widget):
             var class_hex = class_hex;
             var checkbox_class = checkbox_class
             var term_to_class = term_to_class;
-
 
             if (sd_x % 1 == 0){var sd_x = sd_x.toFixed(1)}
             var sd_x = String(sd_x);
@@ -415,7 +416,7 @@ def return_JS_code(widget):
               <col width="305">
               <tr>
                 <th>Total Counts</th>
-                <th>@Count</th>
+                <th>@Count_total</th>
                 <th>@TFIDF</th>
                 <th>($x, $y)</th>
               </tr>
