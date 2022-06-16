@@ -58,20 +58,20 @@ def get_file_to_link(url, folder):
     return file_to_link
 
 def main():
-    # Define folder paths
+    # Define constants
     FILES_FOLDER = 'files'
     SEARCHES_FOLDER = 'searches_by_year'
+    STORAGE_ID_FILES = '611252ba847d1304ca38b4d4'
+    STORAGE_ID_SEARCHES = '5f3a6bb93bf2520111a1f53f'
+    base_url = 'https://api.osf.io/v2/nodes/pvwu2/files/osfstorage/'
 
-    # Get files from OSF
-    # Check if they alreay exists in current repository
-    # If not, we add them to the directory for downloading 
-    # Then files are downloaded with a progress bar
-    url = 'https://api.osf.io/v2/nodes/pvwu2/files/osfstorage/611252ba847d1304ca38b4d4/'
+    # Get a list of files from OSF, download the files that are not present in the repository 
+    url = base_url + STORAGE_ID_FILES
     file_to_link = get_file_to_link(url, FILES_FOLDER)
     download_files(file_to_link, FILES_FOLDER)
 
     # Again for searches folder
-    url = 'https://api.osf.io/v2/nodes/pvwu2/files/osfstorage/5f3a6bb93bf2520111a1f53f/' 
+    url = base_url + STORAGE_ID_SEARCHES
     file_to_link = get_file_to_link(url, SEARCHES_FOLDER)
     download_files(file_to_link, SEARCHES_FOLDER)
 
