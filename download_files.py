@@ -5,6 +5,7 @@ import requests
 import json 
 import shutil
 import tqdm
+import collections
 
 def download_files(file_to_link, folder):
     '''
@@ -22,17 +23,6 @@ def download_files(file_to_link, folder):
 
     return
 
-def does_file_exist(file, folder):
-    '''
-    This function returns boolean if file exist or not.
-    If the folder doesn't exist, it will be created.
-    '''
-    if not os.path.isdir(folder):
-        os.mkdir(folder)
-
-    path = os.path.join(folder, file)
-
-    return os.path.exists(path)
 
 def get_response(url):
     '''
@@ -42,38 +32,86 @@ def get_response(url):
     response = json.loads(response.text)
     return response
 
-def get_file_to_link(url, folder):
+def get_osf_to_rel(url):
     '''
-    This function returns a dictionary with download links for files that are missing from the repository.
+    This function ....
     '''
     response = get_response(url)
-    file_to_link = {}
+    ofs_to_rel = collections.defaultdict(dict)
+
     for object in response["data"]:
         file_name = object["attributes"]["name"]
+        download_link = object["links"]["download"]
 
-        if not does_file_exist(file_name, folder):
-            download_link = object["links"]["download"]
-            file_to_link[file_name] = download_link
+        if "_" in file_name:
+            rel = file_name.split("_")[1].split(".")[0]
+            file = file_name.split("_")[0]
+        else:
+            rel = ""
+            file = file_name.split(".")[0]
+            
+        ofs_to_rel[file]["rel"] = rel
+        ofs_to_rel[file]["link"] = download_link
+        ofs_to_rel[file]["name"] = file_name
 
-    return file_to_link
+    return ofs_to_rel
+
+def get_repo_to_rel(folder):
+    '''
+    This function ....
+    '''
+    files = os.listdir(folder)
+    repo_to_rel = collections.defaultdict(dict)
+
+    for file_name in files:
+        rel = file_name.split("_")[1].split(".")[0]
+        file = file_name.split("_")[0]
+        path = os.path.join(folder, file_name)
+
+        repo_to_rel[file]["rel"] = rel
+        repo_to_rel[file]["path"] = path
+        
+    return repo_to_rel
+
+def get_files_to_download(osf_to_rel, repo_to_rel):
+    
+    files_to_download = {}
+
+    for file in osf_to_rel.keys():
+        rel = osf_to_rel[file]['rel']
+        link = osf_to_rel[file]['link']
+        name = osf_to_rel[file]['name']
+
+        if file in repo_to_rel.keys():
+
+            if rel != repo_to_rel[file]["rel"]:
+
+                files_to_download[name] = link
+                path = repo_to_rel[file]["path"]
+                os.remove(path)
+        else:
+
+            files_to_download[name] = link
+
+
+    return files_to_download
 
 def main():
     # Define constants
-    FILES_FOLDER = 'files'
-    SEARCHES_FOLDER = 'searches_by_year'
-    STORAGE_ID_FILES = '611252ba847d1304ca38b4d4'
-    STORAGE_ID_SEARCHES = '5f3a6bb93bf2520111a1f53f'
-    base_url = 'https://api.osf.io/v2/nodes/pvwu2/files/osfstorage/'
+    folder = 'files'
+    url = 'https://api.osf.io/v2/nodes/pvwu2/files/osfstorage/611252ba847d1304ca38b4d4/'
 
-    # Get a list of files from OSF, download the files that are not present in the repository 
-    url = base_url + STORAGE_ID_FILES
-    file_to_link = get_file_to_link(url, FILES_FOLDER)
-    download_files(file_to_link, FILES_FOLDER)
+    # create if not exists 
+    if not os.path.isdir(folder):
+        os.mkdir(folder)
 
-    # Again for searches folder
-    url = base_url + STORAGE_ID_SEARCHES
-    file_to_link = get_file_to_link(url, SEARCHES_FOLDER)
-    download_files(file_to_link, SEARCHES_FOLDER)
+    # Get a list of files from OSF, download the files that are not present in the repository or have newer release
+    osf_to_rel = get_osf_to_rel(url)
+    repo_to_rel = get_repo_to_rel(folder)
+
+    files_to_download = get_files_to_download(osf_to_rel, repo_to_rel)
+
+    download_files(files_to_download, folder)
 
 if __name__ == '__main__':
     main()
