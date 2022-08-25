@@ -1,6 +1,5 @@
 #!/usr/bin/python
 
-
 import argparse
 import math
 import sys
@@ -8,45 +7,6 @@ import pandas as pd
 import numpy as np
 import os
 from pathlib import PurePath
-# from os import listdir
-
-def read_searches_by_year():
-    '''
-    This function reads the summarized searches by decade files in the searches_by_year folder,
-    and returns a dataframe with ChEBI and Publication identifiers.
-    '''
-    folder = 'searches_by_year/'
-    files = [file for file in os.listdir(folder) if '.tsv' in file]
-    df = pd.DataFrame(columns=["ChEBI", "Publication"])
-    for file in files:
-        path = folder+file
-        df_new = pd.read_csv(path, sep='\t', dtype={"ChEBI": "str", "Publication": "str"})
-        df = pd.concat([df, df_new])
-    return df
-
-def get_statistics(df):
-    '''
-    - Extract total amount of unique publiacations.
-    - Construct dictionary with ChEBI ID to the amount of unique publications containing that ChEBI ID.
-    '''
-    N = len(set(df.Publication))
-    df = df.groupby(by=['ChEBI']).count()
-    df = df.rename(columns={"Publication": "Count"})
-    chebi_to_count = df.to_dict()
-    return chebi_to_count, N
-
-def normalize(id, count, N, id_to_npubs):
-    '''
-    This function performs the tfidf normalization based on the number of publications a ChEBI identifers can be found in
-    ( see https://en.wikipedia.org/wiki/Tf%E2%80%93idf ).
-    '''
-    try:
-        npubs = id_to_npubs['Count'][id]
-    except:
-        npubs = 0
-    idf = math.log(N/(1+npubs))
-    tfidf = idf * count
-    return math.floor(tfidf)
 
 def import_properties():
     '''
@@ -59,13 +19,12 @@ def import_properties():
     for file in files:
         path = os.path.join(FOLDER, file)
         key = file.split('2')[1].split('_')[0]
-        if '.pkl' in file :
+        if '.pkl' in file:
             df = pd.read_pickle(path)
             df['ChEBI'] = df['ChEBI'].astype(int)
             df = df.set_index('ChEBI')
-
         else:
-            df = pd.read_csv(path, sep='\t', header=None, names=['ChEBI', 'Info'], index_col='ChEBI')
+            df = pd.read_csv(path, sep='\t', header=None, names=['ChEBI', 'Info'], index_col='ChEBI', dtype={"ChEBI": "int", "Info": "str"})
         id_to_info = df.to_dict()
         data[key] = id_to_info
     return data
@@ -130,12 +89,7 @@ def main():
     else:
         sys.exit('Error: please give \'file\' or \'folder\' as input type')
 
-    # # get searches_by_year and statistics
-    print('getting searches by year ...')
-    df_sby = read_searches_by_year()
-    chebi_to_npubs, N = get_statistics(df_sby)
-
-    # gather properties
+    #gather properties
     data = import_properties()
 
     for result in results:
@@ -146,16 +100,13 @@ def main():
         df = pd.read_csv(result, sep = '\t', names=['ChEBI', 'Publication'], dtype={"ChEBI": "int", "Publication": "str"})
         df_results = df.groupby(by=['ChEBI']).count().rename(columns={"Publication": "Count"})
 
-        # perform normalization
-        df_results.loc[:,"TFIDF"] = [normalize(str(id), count, N, chebi_to_npubs) for id, count in zip(df_results.index, df_results.Count)]
-        total_tfidf = df_results.TFIDF.sum()
-        total_counts = df_results.Count.sum()
-        df_results.loc[:,"TFIDF"] = df_results.TFIDF * (total_counts / total_tfidf)
-        df_results = df_results.round()
-        df_results = df_results.astype({'TFIDF': 'int32'})
-
         # make table
         table = make_table(data, df_results)
+
+        # perform normalization
+        table.loc[:,"TFIDF"] = table["Count"].astype(float)*table["idf"].astype(float)
+        table.loc[:,"TFIDF"] = table.loc[:,"TFIDF"].round(decimals=0).astype(int)
+        print(table)
 
         # write table to file
         write_to_file(table, term)

@@ -2,120 +2,20 @@
 
 import os
 import requests
+import json 
 import shutil
 import tqdm
+import collections
 
-def return_file_info():
-    '''
-    '''
-    file_to_id = {
-    'ChEBI2logP': 'zjrmy',
-    'ChEBI2logS': '5nuew',
-    'ChEBI2Mass': '3s7bn',
-    'ChEBI2Class': 'dh7kr',
-    'ChEBI2Names': 'gmq9h',
-    'ChEBI2Smiles': 'jusvb'
-    }
-    return file_to_id
-# def return_file_info():
-#     '''
-#     '''
-#     file_to_id = {
-#     'ChEBI2logP.tsv': 'zjrmy',
-#     'ChEBI2logS.tsv': '5nuew',
-#     'ChEBI2Mass.tsv': '3s7bn',
-#     'ChEBI2Class.pkl': 'dh7kr',
-#     'ChEBI2Names.tsv': 'gmq9h',
-#     'ChEBI2Smiles.tsv': 'jusvb'
-#     }
-    # return file_to_id
-
-def return_decade_info():
-    '''
-    '''
-    decade_to_id = {
-    '1940-1949_ChEBI_IDS.tsv': 'dz2ks',
-    '1950-1959_ChEBI_IDS.tsv': 'rhyad',
-    '1960-1969_ChEBI_IDS.tsv': 'v5gsp',
-    '1970-1979_ChEBI_IDS.tsv': '9emna',
-    '1980-1989_ChEBI_IDS.tsv': 't4ksw',
-    '1990-1999_ChEBI_IDS.tsv': 'gy2fw',
-    '2000-2009_ChEBI_IDS.tsv': 'rea8g',
-    '2010-2019_ChEBI_IDs.tsv': 'cfjde',
-    '2020-2029_ChEBI_IDs.tsv': 'qptm4',
-    'pre1945_ChEBI_IDs.tsv': '5cnua'
-    }
-
-    return decade_to_id
-
-def check_for_files(dict, folder):
-
-    new_dict = {}
-
-    print('Checking for folder: %s' % folder)
-    if not os.path.isdir(folder):
-        os.mkdir(folder)
-
-    else:
-        files = os.listdir(folder)
-        for key, id in dict.items():
-            if not is_in_files(key, files):
-                new_dict[key] = id
-
-    return new_dict
-
-def is_in_files(key, files):
-    is_in_files = False
-    for file in files:
-        if key in file:
-            is_in_files = True
-    return is_in_files
-
-def check_if_files_exist(dict, folder):
-    '''
-    This function first checks if the 'Files' and 'Searches by year' folder exist.
-    If not, it creates the folders.
-
-    It also deletes entries from the dictionary that are present in the projfect.
-
-    It returns a dictionary retaining only missing files for downloading.
-    '''
-
-    print('Checking for folder: %s' % folder)
-    if not os.path.isdir(folder):
-        os.mkdir(folder)
-
-    new_dict = {}
-    for file, id in dict.items():
-
-        if not os.path.exists(folder+file):
-
-            new_dict[file] = id
-
-    return new_dict
-
-def get_filename(r):
-    '''
-    '''
-    info = r.headers['Content-Disposition']
-    info_listed = info.split(";")
-    file_name = info_listed[1].split("\"")[1]
-    return file_name
-
-def download_missing_files(dict, folder, base_url):
+def download_files(file_to_link, folder):
     '''
     This function downloads the missing files from the OSF project (https://osf.io/pvwu2/).
     '''
-
-    for file, id in dict.items():
-        url = base_url + id + '/'
-        r = requests.get(url, stream=True)
-
-
-        file_name = get_filename(r)
+    for file, link in file_to_link.items():
+        r = requests.get(link, stream=True)
         file_size = int(r.headers['Content-Length'])
-        desc = 'Downloading %s' % file_name
-        path = folder+file_name
+        desc = 'Downloading %s' % file
+        path = os.path.join(folder, file)
 
         with tqdm.tqdm.wrapattr(r.raw, "read", total=file_size, desc=desc) as r_raw:
             with open(path, "wb") as f:
@@ -123,24 +23,95 @@ def download_missing_files(dict, folder, base_url):
 
     return
 
+
+def get_response(url):
+    '''
+    This function returns url response.
+    '''
+    response = requests.get(url)
+    response = json.loads(response.text)
+    return response
+
+def get_osf_to_rel(url):
+    '''
+    This function ....
+    '''
+    response = get_response(url)
+    ofs_to_rel = collections.defaultdict(dict)
+
+    for object in response["data"]:
+        file_name = object["attributes"]["name"]
+        download_link = object["links"]["download"]
+
+        if "_" in file_name:
+            rel = file_name.split("_")[1].split(".")[0]
+            file = file_name.split("_")[0]
+        else:
+            rel = ""
+            file = file_name.split(".")[0]
+            
+        ofs_to_rel[file]["rel"] = rel
+        ofs_to_rel[file]["link"] = download_link
+        ofs_to_rel[file]["name"] = file_name
+
+    return ofs_to_rel
+
+def get_repo_to_rel(folder):
+    '''
+    This function ....
+    '''
+    files = os.listdir(folder)
+    repo_to_rel = collections.defaultdict(dict)
+
+    for file_name in files:
+        rel = file_name.split("_")[1].split(".")[0]
+        file = file_name.split("_")[0]
+        path = os.path.join(folder, file_name)
+
+        repo_to_rel[file]["rel"] = rel
+        repo_to_rel[file]["path"] = path
+        
+    return repo_to_rel
+
+def get_files_to_download(osf_to_rel, repo_to_rel):
+    
+    files_to_download = {}
+
+    for file in osf_to_rel.keys():
+        rel = osf_to_rel[file]['rel']
+        link = osf_to_rel[file]['link']
+        name = osf_to_rel[file]['name']
+
+        if file in repo_to_rel.keys():
+
+            if rel != repo_to_rel[file]["rel"]:
+
+                files_to_download[name] = link
+                path = repo_to_rel[file]["path"]
+                os.remove(path)
+        else:
+
+            files_to_download[name] = link
+
+
+    return files_to_download
+
 def main():
     # Define constants
-    FILES_FOLDER = 'files/'
-    SEARCHES_FOLDER = 'searches_by_year/'
-    URL = 'https://osf.io/download/'
+    folder = 'files'
+    url = 'https://api.osf.io/v2/nodes/pvwu2/files/osfstorage/611252ba847d1304ca38b4d4/'
 
-    # Get file path + OSF id, hardcoded in this script
-    file_to_id = return_file_info()
-    decade_to_id = return_decade_info()
+    # create if not exists 
+    if not os.path.isdir(folder):
+        os.mkdir(folder)
 
-    # Go file by file to see if it alread exists in project folder
-    # Download missing file from the OSF storage
-    file_to_id = check_for_files(file_to_id, FILES_FOLDER)
-    download_missing_files(file_to_id, FILES_FOLDER, URL)
+    # Get a list of files from OSF, download the files that are not present in the repository or have newer release
+    osf_to_rel = get_osf_to_rel(url)
+    repo_to_rel = get_repo_to_rel(folder)
 
-    # Again for searches folder
-    decade_to_id = check_for_files(decade_to_id, SEARCHES_FOLDER)
-    download_missing_files(decade_to_id, SEARCHES_FOLDER, URL)
+    files_to_download = get_files_to_download(osf_to_rel, repo_to_rel)
+
+    download_files(files_to_download, folder)
 
 if __name__ == '__main__':
     main()
