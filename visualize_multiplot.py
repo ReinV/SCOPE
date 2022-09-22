@@ -778,7 +778,7 @@ def get_tables(files):
     tables = dict()
     for file in files:
         table = import_table(file)
-        term = file.split('/')[1].split('_')[0]
+        term = file.split('/')[1].split('_table')[0]
         metadata_file = 'metadata/'+str(term)+'.txt'
         metadata_lines = open(metadata_file, 'r')
         metadata = metadata_lines.readlines()
