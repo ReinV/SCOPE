@@ -1,16 +1,38 @@
-# Toolbox
+# SCOPE
+
+[1. Introduction](#1-Introduction)  
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[1.1 What is SCOPE?](#11-What-is-SCOPE)  
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[1.2 What can it be used for?](#12-What-can-it-be-used-for)  
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[1.3 Workflow](#13Workflow)  
+[2. Prepare SCOPE](#2-Prepare-SCOPE)  
+[3. Usage](#3-Usage)  
+
+## Introduction 
+
+## 1.1 What is SCOPE?
+SCOPE is a literature review tool for 
+- chemicals mentioned in scientific literature. 
+- Publications resulting from a query search
+- Chemicals are tagged
+- Visualized in an interactive density plot
+- Mass over logP
+- Properties have been retrieved from other sources
+- SCOPE consists of several python scripts, easy to use but queries can take a long time 
+
+## 1.2 What can it be used for?
+- Compare chemical detection methods
+- Compare vendors
+- Compare medicines/diseases
+
+## 1.3 Workflow
+
+<!-- 
 This toolbox contains python scripts that follow the [EuropePMC2ChEBI KNIME workflow](https://github.com/magnuspalmblad/EuropePMC2ChEBI). In this workflow, annotated chemicals are collected through literature searches via the [Europe PMC site](https://europepmc.org/). Properties of these chemicals can be visualized in interactive plots using the [Bokeh library](https://bokeh.pydata.org). This allows comparison between the data of different query searches, for example detecting bias in different analytical chemical techniques.
 
 # Plotting chemicals
-For plotting chemicals we use certain properties such as mass and logP. These do not come from the search itself but have been retrieved from several sources. We use the ChEBI Ontology to retrieve all ChEBI chemicals, their mass values, and SMILES. Additionally, log *P* and log *S* values are predicted using the AlogPS3.0 model from the OCHEM website [ochem.eu site](https://ochem.eu).
+For plotting chemicals we use certain properties such as mass and logP. These do not come from the search itself but have been retrieved from several sources. We use the ChEBI Ontology to retrieve all ChEBI chemicals, their mass values, and SMILES. Additionally, log *P* and log *S* values are predicted using the AlogPS3.0 model from the OCHEM website [ochem.eu site](https://ochem.eu). -->
 
-# Publication 
-In progress ...
-
-<!-- # Workflow -->
-<!-- ![Workflow scheme](workflow_scheme_new_adjusted.png) -->
-
-# Prepare SCOPE
+# 2. Prepare SCOPE
 
 1. Pull the git repo
 
@@ -22,7 +44,6 @@ or https
 
 <pre><code>git pull https://github.com/ReinV/SCOPE.git</code></pre>
 
-
 2. Download the required files from our [OSF project](https://osf.io/pvwu2/). 
 
 <pre><code>python download_files.py</code></pre>
@@ -31,7 +52,7 @@ In these files, ChEBI identifiers are linked to properties of interest (for plot
 
 Everything should now be in place for using SCOPE.
 
-# Usage
+# 3. Usage
 
 Execute "python \<script name> -h" to get a description of the required arguments.
 
@@ -56,7 +77,7 @@ The results will be stored in the "results" folder with the output tag as output
 
 Warning: this may take up to several hours if there are many search hits. It is recommended to start with a more specific search when trying out SCOPE for the first time.
 
-3. Make a table. 
+3. Summarize the query results: make a table. 
 
 Use the results folder as input
 
@@ -71,5 +92,7 @@ or a specific file
 <pre><code>python visualize_multiplot.py -i tables -o &lt;plot-name&gt;</code></pre>
 
 This plot will be saved in the "plots" folder.
+
+# Further reading
 
 
