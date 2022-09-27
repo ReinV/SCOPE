@@ -6,8 +6,7 @@ import argparse
 from math import exp
 from math import sqrt
 from datetime import datetime
-from os import listdir
-import sys
+import os
 
 # BOKEH
 from bokeh import events
@@ -633,9 +632,10 @@ def plot(tables, output_filename, xmin, xmax, ymin, ymax, class_id):
     The hexagon plot is saved as a .html file and also shown in the browser.
     '''
 
+    if not os.path.isdir('plots'):
+        os.mkdir('plots')
     file_name = 'plots/'+str(output_filename)+'.html'
     output_file(file_name)
-
     # Blur and saturation values
     BLUR_MAX = 4
     BLUR_STEP_SIZE = 0.25
@@ -791,7 +791,7 @@ def get_files(folder):
     '''
     This function recieves the input folder and returns a list of file paths in this folder.
     '''
-    files = ['%s/%s' % (folder, file) for file in listdir(folder) if '.pkl' in file]
+    files = ['%s/%s' % (folder, file) for file in os.listdir(folder) if '.pkl' in file]
     return files
 
 def parser():
