@@ -5,7 +5,13 @@
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[1.2 What can it be used for?](#12-What-can-it-be-used-for)  
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[1.3 Workflow](#13Workflow)  
 [2. Prepare SCOPE](#2-Prepare-SCOPE)  
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[2.1 Pull the git repo](#21-Pull-the-git-repo)  
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[2.2 Download the required files](#22-Download-the-required-files)  
 [3. Usage](#3-Usage)  
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[3.1 Create query file](#31-Create-query-file)  
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[3.2 Search for all publications using the query file](#32-Search-for-all-publications-using-the-query-file)  
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[3.3-Summariz-the-query-results:-make-a-table](#33-Summarize-the-query-results:-make-a-table)  
+[4. Further reading](#4-Further-reading)  
 
 ## Introduction 
 
@@ -32,7 +38,7 @@ For plotting chemicals we use certain properties such as mass and logP. These do
 
 # 2. Prepare SCOPE
 
-1. Pull the git repo
+## 2.1 Pull the git repo
 
 using ssh 
 
@@ -42,7 +48,7 @@ or https
 
 <pre><code>git pull https://github.com/ReinV/SCOPE.git</code></pre>
 
-2. Download the required files from our [OSF project](https://osf.io/pvwu2/). 
+## 2.2 Download the required files from our [OSF project](https://osf.io/pvwu2/)
 
 <pre><code>python download_files.py</code></pre>
 
@@ -54,7 +60,7 @@ Everything should now be in place for using SCOPE.
 
 Execute "python \<script name> -h" to get a description of the required arguments.
 
-1. Create query file
+## 3.1 Create query file
 
 Put the search queries (at least one) in a text file in the following structure: 
 
@@ -67,7 +73,7 @@ The search query should be written with the syntax used on the Europe PMC site. 
 
 We provide one example input file in the "queries" folder. 
 
-2. Search for all publications using the query file. 
+## 3.2 Search for all publications using the query file
 
 <pre><code>python search_query.py -i &lt;path-to-input-file&gt;</code></pre>
 
@@ -75,7 +81,7 @@ The results will be stored in the "results" folder with the output tag as output
 
 Warning: this may take up to several hours if there are many search hits. It is recommended to start with a more specific search when trying out SCOPE for the first time.
 
-3. Summarize the query results: make a table. 
+## 3.3 Summarize the query results: make a table
 
 Use the results folder as input
 
@@ -85,12 +91,12 @@ or a specific file
 
 <pre><code>python make_table.py -i &lt;path-to-result-file&gt; -t file</code></pre>
 
-4. Plot the query results. 
+## 3.4 Plot the query results
 
 <pre><code>python visualize_multiplot.py -i tables -o &lt;plot-name&gt;</code></pre>
 
 This plot will be saved in the "plots" folder.
 
-# Further reading
+# 4 Further reading
 
 
