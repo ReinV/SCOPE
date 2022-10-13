@@ -2,8 +2,9 @@
 
 [1. Introduction](#1-Introduction)  
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[1.1 What is SCOPE?](#11-What-is-SCOPE)  
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[1.2 What can it be used for?](#12-What-can-it-be-used-for)  
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[1.3 Workflow](#13Workflow)  
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[1.2 How does it work?](#12-How-does-it-work?)  
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[1.3 What can it be used for?](#13-What-can-it-be-used-for)  
+<!-- &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[1.3 Workflow](#13Workflow)   -->
 [2. Prepare SCOPE](#2-Prepare-SCOPE)  
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[2.1 Pull the git repo](#21-Pull-the-git-repo)  
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[2.2 Download the required files](#22-Download-the-required-files)  
@@ -21,14 +22,12 @@ SCOPE is a literature review tool for detecting chemical patterns. Chemicals res
 ## 1.2 How does it work?
 Chemicals in publications on the [Europe PMC site](https://europepmc.org/) are tagged with a CheBI identifier.  Several chemical properties can be retrieved from the [ChEBI Ontology](https://www.ebi.ac.uk/chebi/) using a ChEBI identifier as a key. Log *P* and log *S* values are predicted using the AlogPS3.0 model from the OCHEM website [ochem.eu site](https://ochem.eu) with SMILES (notification for chemical structures, also retrieved from the ontology). SCOPE connects ChEBI identifiers resulting from a query results with chemical properties of interest.
 
--- workflow image -- 
+<!-- -- workflow image --  -->
 
-## 1.2 What can it be used for?
+## 1.3 What can it be used for?
 - Compare chemical detection methods
 - Compare vendors
 - Compare medicines/diseases
-
-
 
 <!-- 
 This toolbox contains python scripts that follow the [EuropePMC2ChEBI KNIME workflow](https://github.com/magnuspalmblad/EuropePMC2ChEBI). In this workflow, annotated chemicals are collected through literature searches via the [Europe PMC site](https://europepmc.org/). Properties of these chemicals can be visualized in interactive plots using the [Bokeh library](https://bokeh.pydata.org). This allows comparison between the data of different query searches, for example detecting bias in different analytical chemical techniques.
