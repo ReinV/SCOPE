@@ -1,10 +1,9 @@
 # SCOPE
-
+<!-- &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[1.3 Workflow](#13Workflow)   -->
 [1. Introduction](#1-Introduction)  
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[1.1 What is SCOPE?](#11-What-is-SCOPE)  
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[1.2 How does it work?](#12-How-does-it-work?)  
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[1.3 What can it be used for?](#13-What-can-it-be-used-for)  
-<!-- &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[1.3 Workflow](#13Workflow)   -->
 [2. Prepare SCOPE](#2-Prepare-SCOPE)  
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[2.1 Pull the git repo](#21-Pull-the-git-repo)  
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[2.2 Download the required files](#22-Download-the-required-files)  
