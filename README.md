@@ -10,7 +10,7 @@
 [3. Usage](#3-Usage)  
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[3.1 Create query file](#31-Create-query-file)  
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[3.2 Search for all publications using the query file](#32-Search-for-all-publications-using-the-query-file)  
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[3.3 Summarize the query results: make a table](#33-Summarize-the-query-results:-make-a-table)  
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[3.3 Summarize the query results](#33-Summarize-the-query-results)  
 [4. Further reading](#4-Further-reading)  
 
 ## Introduction 
@@ -79,7 +79,7 @@ The results will be stored in the "results" folder with the output tag as output
 
 Warning: this may take up to several hours if there are many search hits. It is recommended to start with a more specific search when trying out SCOPE for the first time.
 
-## 3.3 Summarize the query results: make a table
+## 3.3 Summarize the query results
 
 Use the results folder as input
 
